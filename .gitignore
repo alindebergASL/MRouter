@@ -37,6 +37,9 @@ node_modules/
 target/
 /bin/
 
+# Tool downloads (scripts/actionlint.sh)
+.cache/
+
 # Build output and coverage
 dist/
 build/

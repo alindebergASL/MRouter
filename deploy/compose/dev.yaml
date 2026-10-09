@@ -1,0 +1,38 @@
+# Purser development stack: the same file runs on a Mac (Docker Desktop or
+# Colima), in Claude Code cloud sessions, and in GitHub Actions (build plan §2.8).
+# Start it with `make dev-up`; stop it with `make dev-down`.
+#
+# Every image is pinned by digest and pre-pulled by scripts/cloud-setup.sh;
+# `make check-pins` keeps the two in step.
+
+name: purser-dev
+
+services:
+  postgres:
+    # Production major version (Amazon RDS for PostgreSQL 18). See ADR 0002.
+    image: public.ecr.aws/docker/library/postgres:18.6-trixie@sha256:74935e72241653ca55e0414067e6d8763aceb8a810eb51b452253ec3dcfc4336
+    environment:
+      # Development-only credentials. Not secrets; never reuse them anywhere else.
+      POSTGRES_USER: purser_dev
+      POSTGRES_PASSWORD: purser-dev-only-not-a-secret
+      POSTGRES_DB: purser_dev
+    ports:
+      # Loopback only, on a non-default port so it can't clash with a local Postgres.
+      - "127.0.0.1:55432:5432"
+    volumes:
+      # Postgres 18 images keep PGDATA at /var/lib/postgresql/18/docker and
+      # declare the volume at /var/lib/postgresql (not .../data as before 18).
+      - pgdata:/var/lib/postgresql
+    shm_size: 256mb
+    healthcheck:
+      # TCP, not the Unix socket: during first-run initialization the entrypoint's
+      # temporary server listens only on the socket, so this can't pass early.
+      test: ["CMD", "pg_isready", "-h", "127.0.0.1", "-U", "purser_dev", "-d", "purser_dev"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+      start_period: 30s
+      start_interval: 1s
+
+volumes:
+  pgdata:
