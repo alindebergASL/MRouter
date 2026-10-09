@@ -1,7 +1,7 @@
 # 0003. Auth service for people identity
 
-- Status: Proposed
-- Date: 2026-10-09
+- Status: Accepted
+- Date: 2026-10-09 (proposed and accepted)
 - Deciders: Andrew Lindeberg
 - Guarantees affected: none changed. Referenced: G5, A1 (every console action available by
   API), A2 ("a revoked device makes no successful upstream attempt more than 15 minutes after
@@ -35,9 +35,13 @@ building this". Build plan §6 makes the choice part of gate G0, and Lane D's ne
   must learn of it promptly so that the user's devices are revoked and A2's 15-minute bound
   holds for the user as well as the device. Because A1 routes every admin operation through
   our API, and the SCIM endpoint is ours (below), the control plane is the source of those
-  changes in the normal case. An event or webhook from the auth service (R14) covers changes
-  made behind our back, and relay-token issuance re-checks the user's state in the auth service
-  so that even a change made there directly takes effect within one 15-minute token lifetime.
+  changes in the normal case and A2 holds as written, because revocation happens when our
+  control plane acts. The auth service stays off the traffic path: relay-token issuance checks
+  user and device state in our database only and never calls the auth service, so an auth-service
+  outage cannot stop sidecars renewing tokens. Changes made directly in the auth service are
+  caught by a reconciler in the control plane (R14 is the vendor's own event mechanism, scored for
+  comparison; the reconciler is what we rely on). Measured from a change made directly in the auth
+  service, the bound is 15 minutes plus the reconciler's poll interval plus one run's duration.
 - **C1.** The auth service never holds provider credentials, federation tokens, or data keys.
   It authenticates people and nothing else.
 
@@ -323,10 +327,20 @@ For Lane D's next tasks:
   public client configured to issue no refresh or offline tokens; the control plane accepts the
   resulting access token once, binds device to user, issues the mTLS certificate from our CA,
   and discards the token. Revocation stays ours: disabling a user through our API disables the
-  Keycloak user and revokes the device, which is what A2 measures. Each 15-minute relay-token
-  issuance also checks that the user is still enabled in Keycloak, so a disable made directly in
-  Keycloak's admin console (break-glass only; day-to-day administration goes through our API)
-  takes effect within one token lifetime.
+  Keycloak user and revokes the device, which is what A2 measures. Relay-token issuance reads
+  user and device state from our database only; it never calls Keycloak.
+- **Reconciler.** A control-plane job polls Keycloak's admin events through the admin API once a
+  minute, filtered from the last successful run's timestamp. On any USER UPDATE or DELETE event it
+  re-reads the user's current state through the admin API, rather than trusting the event's
+  stored representation (which is present only when "include representation" is enabled), and
+  disables the user in our database when the user is disabled or gone, which revokes the user's
+  devices. Keycloak configuration requirements: admin events are saved, with retention of at
+  least 7 days, so a reconciler outage can catch up. The reconciler alerts if a poll fails or if it
+  falls behind by more than 5 minutes. Worst case for a change made directly in Keycloak's admin
+  console (break-glass only; day-to-day administration goes through our API): 15 minutes plus the
+  poll interval (60 s) plus one run's duration. A2 as written is unaffected, because it measures
+  revocation through our API, where the device is revoked immediately and only the outstanding
+  token lifetime remains.
 - **Console.** Plain OIDC through Auth.js; self-service SSO setup is a console page calling our API,
   which calls Keycloak's organization identity-provider endpoints.
 - **Dev stack.** Add Keycloak to `deploy/compose/dev.yaml` from `quay.io/keycloak/keycloak`, pinned
@@ -340,9 +354,49 @@ For Lane D's next tasks:
   checks are written for images we publish; the Keycloak image is third-party, pinned by digest,
   and run as a non-root user with a read-only root filesystem where its documentation allows.
   Adding the auth service to §9's component table is a spec change for a later PR. Pin the
-  Keycloak version and upgrade on a monthly cadence with the release notes read first.
+  Keycloak version and upgrade on a monthly cadence with the release notes read first. A single
+  Fargate task is acceptable for v1: because Keycloak is off the traffic path, an outage blocks
+  only new sign-ins and enrollments, not metered traffic or token renewal, and the load balancer's
+  health check replaces a failed task. Add a second task when sign-in availability becomes a
+  customer commitment.
 - **Do not** adopt Phase Two's extensions: their Elastic License 2 would have to be reviewed for
   the customer-hosted case, and the SCIM they add is experimental; our control plane covers it.
+
+### Cost of the SCIM endpoint
+
+Choosing Keycloak means the control plane builds and certifies the SCIM endpoint that the hosted
+leaders include. The cost is made explicit so it can be measured against the trigger below.
+
+Scope:
+
+- SCIM 2.0 `/Users` and `/Groups` with the RFC 7643 core and enterprise-user schemas; POST, GET,
+  PUT, PATCH, DELETE; `/ServiceProviderConfig`, `/ResourceTypes`, `/Schemas`; a per-org base URL.
+- PATCH per RFC 7644 §3.5.2: `add`, `replace`, `remove`, with value-path filters (the form Entra
+  ID and Okta send for group membership and the `active` flag).
+- `filter` with `eq`, `ne`, `co`, `sw`, `and`, `or`, and parenthesised groups at minimum, plus
+  `startIndex` and `count` paging and `excludedAttributes`.
+- Per-org bearer tokens generated by the control plane, stored hashed, rotatable, revocable; an
+  audit record per SCIM request without body content.
+- `externalId`, group membership, and the SCIM-to-team mapping live in our database; user
+  create, update, disable (`active: false`), and delete map to Keycloak admin-API calls, and the
+  reconciler above is the safety net if a Keycloak call succeeds after our transaction fails.
+
+Compatibility testing: Microsoft Entra ID's SCIM validator against a staging deployment, an Okta
+SCIM integration test tenant through its application-integration test cases, and a replayed
+fixture suite recorded from both in CI so regressions are caught without the live tenants.
+
+Effort estimate: **12 engineer-days**, assuming one engineer who knows FastAPI, the schemas
+written from the RFCs rather than a library, and that Entra and Okta test tenants are available
+from day one.
+
+| Part | Days |
+|---|---|
+| Schemas, CRUD, discovery endpoints, paging | 2 |
+| PATCH and filter parsers with their test corpus | 3 |
+| Per-org token issuance, hashing, rotation, audit | 1 |
+| Keycloak admin-API mapping and reconciler interplay | 2 |
+| Entra ID validator and Okta certification, fixing what they find, recording fixtures | 3 |
+| Customer-facing setup page and documentation | 1 |
 
 What would change the decision:
 
@@ -359,6 +413,8 @@ What would change the decision:
    reconsider it as the lighter self-hosted option.
 6. WorkOS or Auth0 publish a us-east-1 residency commitment and the customer-hosted requirement is
    dropped from the roadmap: re-score with R12 at weight 0, which would put Auth0 first.
+7. Building and certifying the SCIM endpoint runs more than 50% over the estimate above (beyond
+   18 engineer-days): re-score against Auth0, where inbound SCIM is included on every plan.
 
 ## Sources
 
