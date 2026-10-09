@@ -7,3 +7,4 @@ Copy `template.md` to start one. Superseded records stay, with their status upda
 |---|---|---|
 | [0001](0001-record-architecture-decisions.md) | Record architecture decisions | Accepted |
 | [0002](0002-postgres-18-for-development-and-tests.md) | Postgres 18 for development and tests | Accepted |
+| [0003](0003-auth-service.md) | Auth service for people identity | Accepted |
