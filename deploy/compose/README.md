@@ -4,7 +4,8 @@ Compose files for running Purser's containers.
 
 | File | Purpose |
 |---|---|
-| `dev.yaml` | The build's development stack. Today: Postgres. Later: mock providers, recorder, relay, control plane, console, Toxiproxy (build plan §2.8). |
+| `dev.yaml` | The build's development stack. Today: Postgres and Keycloak. Later: mock providers, recorder, relay, control plane, console, Toxiproxy (build plan §2.8). |
+| `keycloak/` | Keycloak's database init SQL and the dev realms imported at start (`realms/`). |
 | `sidecar.yaml` | (Later, Lane C) The single-host sidecar (architecture §9, D3). |
 
 ## The dev stack
@@ -12,6 +13,8 @@ Compose files for running Purser's containers.
 ```sh
 make dev-up      # start and wait until every service is healthy
 make dev-psql    # psql shell
+make dev-check   # smoke-check Keycloak: issuer, token claims, admin events
+make dev-token WHO=bob   # print a dev-realm access token (alice or bob)
 make dev-down    # stop (keeps the data volume); make dev-reset also deletes it
 ```
 
@@ -21,6 +24,8 @@ SessionStart hook starts it), and in GitHub Actions (`.github/workflows/ci.yml`)
 | Service | Image | Host address | Credentials |
 |---|---|---|---|
 | `postgres` | `postgres:18.6-trixie` from public ECR, pinned by digest (ADR 0002) | `127.0.0.1:55432` | user `purser_dev`, password `purser-dev-only-not-a-secret`, database `purser_dev` |
+| `keycloak-db-init` | same Postgres image; one-shot | none | creates role `keycloak_dev` (password `keycloak-db-dev-only-not-a-secret`) and database `keycloak` |
+| `keycloak` | `quay.io/keycloak/keycloak:26.8.0`, pinned by digest (ADR 0003) | `127.0.0.1:58080` | bootstrap admin `admin` / `keycloak-admin-dev-only-not-a-secret` (master realm) |
 
 Connection string: `postgresql://purser_dev:purser-dev-only-not-a-secret@127.0.0.1:55432/purser_dev`.
 These credentials are for this local stack only and are not secrets.
@@ -36,6 +41,68 @@ Notes:
   realistic commit behavior.
 - **Adding an image:** pin it by digest (`image: repo:tag@sha256:…`) and add the same string to
   `IMAGES` in `scripts/cloud-setup.sh`. `make check-pins` (run in CI) fails otherwise.
+
+## Keycloak (dev only)
+
+Keycloak runs `start-dev --import-realm`: HTTP, no TLS, and development defaults. **`start-dev` is for
+this stack only.** Production runs `start` behind TLS against its own RDS instance, with every
+secret read from AWS Secrets Manager at run time (ADR 0003, Consequences).
+
+**One issuer everywhere.** Keycloak listens on port 58080 inside its container as well as on the
+host, and `KC_HOSTNAME=http://localhost:58080` fixes the frontend URL, so every token's `iss` is
+`http://localhost:58080/realms/<realm>` wherever it was requested. Containers that share
+Keycloak's network namespace (`network_mode: service:keycloak`) reach the same URL;
+other containers use `http://keycloak:58080`, which `KC_HOSTNAME_BACKCHANNEL_DYNAMIC` lets them
+use for discovery, JWKS, and the admin API.
+
+**Realms are imported only when they don't exist.** After editing a file in `keycloak/realms/`,
+run `make dev-reset && make dev-up` (this also wipes the dev Postgres), or delete the realm in the
+admin console and restart the `keycloak` service.
+
+### Realm `purser-dev`
+
+Every credential below is development-only and not a secret; each ends in `-dev-only-not-a-secret`.
+
+| Object | Details |
+|---|---|
+| Organization `acme-dev` | "Acme Dev", ID `ac3e0000-0000-4000-8000-000000000001`, domain `acme-dev.example`; members alice and bob |
+| User `alice@acme-dev.example` | ID `a11ce000-0000-4000-8000-000000000001`; password `alice-dev-only-not-a-secret`; TOTP whose secret bytes are the ASCII string `alice-totp-dev-only-not-a-secret` (base32 `MFWGSY3FFV2G65DQFVSGK5RNN5XGY6JNNZXXILLBFVZWKY3SMV2A`) |
+| User `bob@acme-dev.example` | ID `b0b00000-0000-4000-8000-000000000002`; password `bob-dev-only-not-a-secret`; no second factor |
+| Client `purser-controlplane` | Confidential, service account only, secret `controlplane-dev-only-not-a-secret`. The control plane's admin-API client (see roles below). |
+| Client `purser-console` | Public, authorization code with PKCE (S256), redirect `http://localhost:3000/*`. For the console (Lane D task 4). |
+| Client `purser-dev-test` | Public; direct grant and code flow (redirect `http://localhost/dev-test-callback`). Tests and `make dev-token` only. |
+| Client `purser-dev-noaud` | As `purser-dev-test` but without the admin-API audience: tokens the control plane must reject. |
+| Client `purser-dev-shortlived` | As `purser-dev-test` with 2-second access tokens: for expiry tests. |
+
+**Tokens carry identifiers and levels only.** The realm defines its own minimal client scopes in
+place of Keycloak's defaults. An access token for the admin API has `iss`, `sub`, `aud`
+(`purser-admin-api`), `azp`, `acr`, `auth_time`, `scope`, and `organization` as
+`{"<alias>": {"id": "<organization id>"}}`. The control plane keys on the ID, because aliases can
+change. Name and email go in the ID token only, for the console.
+
+**Step-up authentication.** The browser flow `browser-step-up` maps levels of authentication to
+`acr` values (`acr.loa.map`): level 1 `pwd` is a password; level 2 `mfa` adds TOTP or a passkey
+(WebAuthn). A client asks for `acr_values=mfa` to force the second factor. Operator endpoints in the
+control plane require `acr=mfa`. Direct grants always yield `acr=pwd`.
+
+**Admin events** are saved with 7-day retention (`adminEventsExpiration` 604800 s) and without
+representations, so a reconciler outage can catch up (ADR 0003). User attribute `purser_id`
+(admin-only, declared in the user profile) holds the control plane's own ID, for idempotent
+creation; organizations carry the same attribute.
+
+**The admin-API client's roles** (on `realm-management`, granted to the service account and
+mapped into its token scope, with full scope off): `view-users`, `query-users`, `manage-users`,
+`view-events`, and `manage-realm`. Measured on Keycloak 26.8.0: the Organization endpoints return
+403 without `manage-realm`, even for reads, so it is required while the control plane creates
+organizations. It is broad (it covers realm settings and authentication flows); revisit when
+Keycloak offers a narrower organization permission. The client cannot list clients or reach the
+master realm (`make dev-check` asserts the first).
+
+### Realm `purser-dev-other`
+
+A second issuer with its own keys, for tests that must reject a foreign realm's token: user
+`carol@other-dev.example` (password `carol-dev-only-not-a-secret`) and public client
+`purser-dev-test` with the admin-API audience.
 
 ## Network access from containers in a Claude Code cloud session
 

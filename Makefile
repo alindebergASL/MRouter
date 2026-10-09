@@ -4,7 +4,7 @@ COMPOSE := docker compose -f deploy/compose/dev.yaml
 SHELL_SCRIPTS := $(wildcard scripts/*.sh .claude/hooks/*.sh)
 
 .DEFAULT_GOAL := help
-.PHONY: help dev-up dev-down dev-reset dev-ps dev-logs dev-psql \
+.PHONY: help dev-up dev-down dev-reset dev-ps dev-logs dev-psql dev-check dev-token \
         check-pins check-hooks lint test images
 
 help: ## List targets
@@ -27,6 +27,12 @@ dev-logs: ## Follow dev stack logs
 
 dev-psql: ## Open psql in the dev Postgres
 	$(COMPOSE) exec postgres psql -U purser_dev -d purser_dev
+
+dev-check: ## Smoke-check the dev stack's Keycloak (issuer, token claims, admin events)
+	scripts/check-dev-keycloak.sh
+
+dev-token: ## Print a dev-realm access token: make dev-token WHO=alice|bob
+	@scripts/dev-token.sh $(or $(WHO),bob)
 
 check-pins: ## Every Compose image is pinned by digest and pre-pulled by cloud-setup.sh
 	scripts/check-image-pins.sh
