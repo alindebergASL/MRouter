@@ -1,0 +1,384 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:purser:contracts:usage-event:0.1.0",
+  "title": "Usage event",
+  "description": "One usage record per upstream attempt that was dispatched, including relay retries, failures, and unknown outcomes (architecture 6.1, M1). A released attempt sent no byte upstream, so it has no usage record. The record is keyed by attempt_id and updated in place with a higher revision when an unknown attempt settles or reconciliation fills in billed cost. Token counts and costs carry an evidence tier (6.5); an unavailable value is null with a reason, never 0. The record holds identifiers, counts, and money only: no field can carry prompt or response text (C2).",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "attempt_id",
+    "revision",
+    "recorded_at",
+    "state",
+    "dispatched_at",
+    "settled_at",
+    "identity",
+    "correlation",
+    "routing",
+    "dimensions",
+    "tokens",
+    "fees",
+    "computed_cost",
+    "provider_billed_cost",
+    "timing",
+    "flags"
+  ],
+  "properties": {
+    "schema_version": { "$ref": "urn:purser:contracts:common:0.1.0#/$defs/schema_version" },
+    "attempt_id": { "$ref": "urn:purser:contracts:common:0.1.0#/$defs/uuid" },
+    "revision": {
+      "description": "1 when first written; incremented on every update of the same attempt's record.",
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 2147483647
+    },
+    "recorded_at": { "$ref": "urn:purser:contracts:common:0.1.0#/$defs/rfc3339_utc" },
+    "state": {
+      "description": "The attempt's state (attempt schema) when this revision was written. Only states reached after dispatch have usage records.",
+      "enum": ["settled", "unknown"]
+    },
+    "dispatched_at": { "$ref": "urn:purser:contracts:common:0.1.0#/$defs/rfc3339_utc" },
+    "settled_at": {
+      "description": "When the attempt settled; null while it is unknown.",
+      "oneOf": [{ "$ref": "urn:purser:contracts:common:0.1.0#/$defs/rfc3339_utc" }, { "type": "null" }]
+    },
+    "identity": { "$ref": "#/$defs/identity" },
+    "correlation": { "$ref": "#/$defs/correlation" },
+    "routing": { "$ref": "#/$defs/routing" },
+    "dimensions": { "$ref": "#/$defs/dimensions" },
+    "tokens": { "$ref": "#/$defs/tokens" },
+    "fees": {
+      "description": "Per-use fee counts (architecture 6.3), such as web searches. Empty when the attempt used none.",
+      "type": "array",
+      "maxItems": 16,
+      "items": { "$ref": "#/$defs/fee" }
+    },
+    "computed_cost": { "$ref": "#/$defs/computed_cost" },
+    "provider_billed_cost": { "$ref": "#/$defs/provider_billed_cost" },
+    "timing": { "$ref": "#/$defs/timing" },
+    "flags": {
+      "description": "usage_inconsistent: the provider's usage contradicts itself, such as a cache-write split that does not sum to its total (6.3). ceiling_overrun: computed cost exceeded the reserved ceiling (7.6).",
+      "type": "array",
+      "uniqueItems": true,
+      "maxItems": 2,
+      "items": { "enum": ["usage_inconsistent", "ceiling_overrun"] }
+    }
+  },
+  "additionalProperties": false,
+  "allOf": [
+    {
+      "$comment": "A settled attempt has a settlement time; an unknown one does not.",
+      "if": { "properties": { "state": { "const": "settled" } } },
+      "then": { "properties": { "settled_at": { "$ref": "urn:purser:contracts:common:0.1.0#/$defs/rfc3339_utc" } } },
+      "else": { "properties": { "settled_at": { "type": "null" } } }
+    },
+    {
+      "$comment": "A ceiling charge settles an unknown attempt (7.5), so it appears only on settled records.",
+      "if": {
+        "properties": { "computed_cost": { "properties": { "basis": { "const": "ceiling_charge" } } } }
+      },
+      "then": { "properties": { "state": { "const": "settled" } } }
+    },
+    {
+      "$comment": "Cloud-originated clients (Cursor) authenticate with a virtual key and have no device (4). Everything else comes from an enrolled device.",
+      "if": {
+        "properties": { "routing": { "properties": { "data_path": { "const": "public_listener" } } } }
+      },
+      "then": {
+        "properties": {
+          "identity": {
+            "properties": {
+              "device_id": { "type": "null" },
+              "virtual_key_id": { "$ref": "urn:purser:contracts:common:0.1.0#/$defs/id" }
+            }
+          }
+        }
+      },
+      "else": {
+        "properties": {
+          "identity": {
+            "properties": {
+              "device_id": { "$ref": "urn:purser:contracts:common:0.1.0#/$defs/id" },
+              "virtual_key_id": { "type": "null" }
+            }
+          }
+        }
+      }
+    },
+    {
+      "$comment": "Local models are reached by the sidecar directly, and only there.",
+      "if": { "properties": { "routing": { "properties": { "provider": { "const": "local" } } } } },
+      "then": { "properties": { "routing": { "properties": { "data_path": { "const": "local" } } } } },
+      "else": { "properties": { "routing": { "properties": { "data_path": { "enum": ["relay", "public_listener"] } } } } }
+    },
+    {
+      "$comment": "Local models are metered, never billed: their cost is unavailable with reason not_billed, not a measured 0 (open question 4 in the PR).",
+      "if": { "properties": { "routing": { "properties": { "data_path": { "const": "local" } } } } },
+      "then": {
+        "properties": {
+          "computed_cost": { "properties": { "unavailable_reason": { "const": "not_billed" } }, "required": ["unavailable_reason"] },
+          "provider_billed_cost": { "properties": { "unavailable_reason": { "const": "not_billed" } }, "required": ["unavailable_reason"] }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "relay_evidence": {
+      "description": "Tiers a relay record can carry (6.5 Source column). Estimated values come only from trace readers and never reach a usage event.",
+      "enum": ["reconciled", "measured", "inferred", "unavailable"]
+    },
+    "relay_count": {
+      "allOf": [{ "$ref": "urn:purser:contracts:common:0.1.0#/$defs/evidenced_count" }],
+      "properties": { "evidence": { "$ref": "#/$defs/relay_evidence" } }
+    },
+    "relay_duration_ms": {
+      "allOf": [{ "$ref": "urn:purser:contracts:common:0.1.0#/$defs/evidenced_duration_ms" }],
+      "properties": { "evidence": { "$ref": "#/$defs/relay_evidence" } }
+    },
+    "relay_id": {
+      "allOf": [{ "$ref": "urn:purser:contracts:common:0.1.0#/$defs/evidenced_id" }],
+      "properties": { "evidence": { "$ref": "#/$defs/relay_evidence" } }
+    },
+    "relay_hmac": {
+      "allOf": [{ "$ref": "urn:purser:contracts:common:0.1.0#/$defs/evidenced_hmac" }],
+      "properties": { "evidence": { "$ref": "#/$defs/relay_evidence" } }
+    },
+    "identity": {
+      "description": "Who the attempt is attributed to (6.1). Exactly one of device_id and virtual_key_id is set (rule above).",
+      "type": "object",
+      "required": ["org_id", "workspace_id", "team_id", "user_id", "device_id", "virtual_key_id", "harness", "initiator"],
+      "properties": {
+        "org_id": { "$ref": "urn:purser:contracts:common:0.1.0#/$defs/id" },
+        "workspace_id": { "$ref": "urn:purser:contracts:common:0.1.0#/$defs/id" },
+        "team_id": {
+          "description": "Null when the user belongs to no team.",
+          "oneOf": [{ "$ref": "urn:purser:contracts:common:0.1.0#/$defs/id" }, { "type": "null" }]
+        },
+        "user_id": { "$ref": "urn:purser:contracts:common:0.1.0#/$defs/id" },
+        "device_id": { "oneOf": [{ "$ref": "urn:purser:contracts:common:0.1.0#/$defs/id" }, { "type": "null" }] },
+        "virtual_key_id": { "oneOf": [{ "$ref": "urn:purser:contracts:common:0.1.0#/$defs/id" }, { "type": "null" }] },
+        "harness": {
+          "description": "The harness whose request this attempt serves, including relay retries and decision-model calls made on its behalf.",
+          "$ref": "urn:purser:contracts:common:0.1.0#/$defs/harness"
+        },
+        "initiator": {
+          "description": "harness: the client's own request. relay_retry: a relay-initiated retry, its own attempt with its own reservation (7.2). decision_model: a routing decision-model call, metered like any other attempt (8.5 change 4).",
+          "enum": ["harness", "relay_retry", "decision_model"]
+        }
+      },
+      "additionalProperties": false
+    },
+    "correlation": {
+      "description": "Correlation IDs (6.1). Session and prompt IDs are unavailable when the harness does not send them. provider_message_id_hmac is the keyed hash that deduplicates trace events against relay records (6.6, M4).",
+      "type": "object",
+      "required": ["session_id", "prompt_id", "provider_request_id", "provider_message_id_hmac", "retry_of_attempt_id"],
+      "properties": {
+        "session_id": { "$ref": "#/$defs/relay_id" },
+        "prompt_id": { "$ref": "#/$defs/relay_id" },
+        "provider_request_id": {
+          "description": "The provider's request ID, used to match provider usage data during reconciliation (7.5).",
+          "$ref": "#/$defs/relay_id"
+        },
+        "provider_message_id_hmac": { "$ref": "#/$defs/relay_hmac" },
+        "retry_of_attempt_id": {
+          "description": "The attempt this one retries; null when it is not a retry.",
+          "oneOf": [{ "$ref": "urn:purser:contracts:common:0.1.0#/$defs/uuid" }, { "type": "null" }]
+        }
+      },
+      "additionalProperties": false
+    },
+    "routing": {
+      "description": "Where the attempt went and which price book priced it (6.1, P1).",
+      "type": "object",
+      "required": ["provider", "model", "route_id", "route_type", "data_path", "price_book_version", "shadow_decision_id"],
+      "properties": {
+        "provider": { "$ref": "urn:purser:contracts:common:0.1.0#/$defs/provider" },
+        "model": { "$ref": "urn:purser:contracts:common:0.1.0#/$defs/model_id" },
+        "route_id": { "$ref": "urn:purser:contracts:common:0.1.0#/$defs/id" },
+        "route_type": { "$ref": "urn:purser:contracts:common:0.1.0#/$defs/route_type" },
+        "data_path": {
+          "description": "relay: sidecar to relay over mTLS. public_listener: the relay's public HTTPS listener (Cursor). local: a local model through the sidecar.",
+          "enum": ["relay", "public_listener", "local"]
+        },
+        "price_book_version": {
+          "description": "The price-book version effective when the reservation committed (P1).",
+          "$ref": "urn:purser:contracts:common:0.1.0#/$defs/id"
+        },
+        "shadow_decision_id": {
+          "description": "The shadow routing decision logged for this attempt (8.2, 11); null when shadow routing is off.",
+          "oneOf": [{ "$ref": "urn:purser:contracts:common:0.1.0#/$defs/uuid" }, { "type": "null" }]
+        }
+      },
+      "additionalProperties": false
+    },
+    "null_needs_reason": {
+      "if": { "properties": { "value": { "type": "null" } }, "required": ["value"] },
+      "then": { "required": ["unavailable_reason"] },
+      "else": { "not": { "required": ["unavailable_reason"] } }
+    },
+    "dimension_reason": {
+      "description": "not_applicable: the provider has no such setting. not_reported: the response did not say. unrecognized_value: a value outside the enumerated set; the raw string is never stored (C2), and the attempt is unpriced (6.3).",
+      "enum": ["not_applicable", "not_reported", "unrecognized_value"]
+    },
+    "dimensions": {
+      "description": "Request-level settings that change the price (6.2, 6.3), as billed. Values are enumerated so a client-supplied string is never persisted.",
+      "type": "object",
+      "required": ["speed", "service_tier", "inference_geo", "long_context_applied"],
+      "properties": {
+        "speed": {
+          "description": "Anthropic speed (fast mode).",
+          "type": "object",
+          "required": ["value"],
+          "properties": {
+            "value": { "enum": ["standard", "fast", null] },
+            "unavailable_reason": { "$ref": "#/$defs/dimension_reason" }
+          },
+          "additionalProperties": false,
+          "allOf": [{ "$ref": "#/$defs/null_needs_reason" }]
+        },
+        "service_tier": {
+          "description": "Service tier as the provider reports it. OpenAI: auto, default, flex, scale, priority, fast, ultrafast. Anthropic: standard, priority, batch.",
+          "type": "object",
+          "required": ["value"],
+          "properties": {
+            "value": { "enum": ["auto", "default", "flex", "scale", "priority", "fast", "ultrafast", "standard", "batch", null] },
+            "unavailable_reason": { "$ref": "#/$defs/dimension_reason" }
+          },
+          "additionalProperties": false,
+          "allOf": [{ "$ref": "#/$defs/null_needs_reason" }]
+        },
+        "inference_geo": {
+          "description": "Data-residency geography: Anthropic inference_geo, or the OpenAI residency region of the route.",
+          "type": "object",
+          "required": ["value"],
+          "properties": {
+            "value": { "enum": ["global", "us", "eu", null] },
+            "unavailable_reason": { "$ref": "#/$defs/dimension_reason" }
+          },
+          "additionalProperties": false,
+          "allOf": [{ "$ref": "#/$defs/null_needs_reason" }]
+        },
+        "long_context_applied": {
+          "description": "True when the long-context tier priced the whole attempt (6.3).",
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false
+    },
+    "tokens": {
+      "description": "Token counts by class (6.1, 6.2). Priced classes: uncached_input, cache_read, cache_write_5m, cache_write_1h, cache_write_unspecified (writes whose provider reports no TTL, such as OpenAI), output. Informational, never priced again: reasoning (already counted in output where the provider reports it) and cache_write_total (the provider's own total, such as Anthropic cache_creation_input_tokens, kept so an inconsistent split stays visible).",
+      "type": "object",
+      "required": [
+        "uncached_input",
+        "cache_read",
+        "cache_write_5m",
+        "cache_write_1h",
+        "cache_write_unspecified",
+        "output",
+        "reasoning",
+        "cache_write_total"
+      ],
+      "properties": {
+        "uncached_input": { "$ref": "#/$defs/relay_count" },
+        "cache_read": { "$ref": "#/$defs/relay_count" },
+        "cache_write_5m": { "$ref": "#/$defs/relay_count" },
+        "cache_write_1h": { "$ref": "#/$defs/relay_count" },
+        "cache_write_unspecified": { "$ref": "#/$defs/relay_count" },
+        "output": { "$ref": "#/$defs/relay_count" },
+        "reasoning": { "$ref": "#/$defs/relay_count" },
+        "cache_write_total": { "$ref": "#/$defs/relay_count" }
+      },
+      "additionalProperties": false
+    },
+    "fee": {
+      "type": "object",
+      "required": ["fee_id", "count"],
+      "properties": {
+        "fee_id": {
+          "description": "A per_use_fee fee_id from the price book, such as web_search.",
+          "$ref": "urn:purser:contracts:common:0.1.0#/$defs/id"
+        },
+        "count": { "$ref": "#/$defs/relay_count" }
+      },
+      "additionalProperties": false
+    },
+    "unpriced_dimension": {
+      "description": "Which part of the price book was missing (6.3). Names only; never the request's value.",
+      "enum": ["model", "speed", "service_tier", "inference_geo", "long_context", "token_class", "fee", "cache_ttl"]
+    },
+    "computed_cost": {
+      "description": "Cost computed by the relay from the price book, rounded once per attempt to integer nano-dollars (6.4). basis usage: priced from token counts and fees. basis ceiling_charge: an unknown attempt with no exact usage found within the reconciliation window, charged its full ceiling (7.5). Null with a reason when it cannot be computed: unpriced (with unpriced_dimensions), usage_unavailable, or not_billed.",
+      "type": "object",
+      "required": ["nanodollars", "evidence", "basis"],
+      "properties": {
+        "nanodollars": {
+          "oneOf": [{ "$ref": "urn:purser:contracts:common:0.1.0#/$defs/nanodollars" }, { "type": "null" }]
+        },
+        "evidence": {
+          "description": "measured or inferred when computed; unavailable when null. How cost evidence derives from token evidence, and the tier of a ceiling charge, are open questions in the PR.",
+          "enum": ["measured", "inferred", "unavailable"]
+        },
+        "basis": { "enum": ["usage", "ceiling_charge", null] },
+        "unavailable_reason": { "enum": ["unpriced", "usage_unavailable", "not_billed"] },
+        "unpriced_dimensions": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 8,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/unpriced_dimension" }
+        }
+      },
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "if": { "properties": { "evidence": { "const": "unavailable" } }, "required": ["evidence"] },
+          "then": {
+            "properties": { "nanodollars": { "type": "null" }, "basis": { "type": "null" } },
+            "required": ["unavailable_reason"]
+          },
+          "else": {
+            "properties": {
+              "nanodollars": { "$ref": "urn:purser:contracts:common:0.1.0#/$defs/nanodollars" },
+              "basis": { "enum": ["usage", "ceiling_charge"] }
+            },
+            "not": { "anyOf": [{ "required": ["unavailable_reason"] }, { "required": ["unpriced_dimensions"] }] }
+          }
+        },
+        {
+          "if": { "properties": { "unavailable_reason": { "const": "unpriced" } }, "required": ["unavailable_reason"] },
+          "then": { "required": ["unpriced_dimensions"] },
+          "else": { "not": { "required": ["unpriced_dimensions"] } }
+        }
+      ]
+    },
+    "provider_billed_cost": {
+      "description": "The provider's billed cost, filled in by monthly reconciliation (6.1, M3). Unavailable with pending_reconciliation until then.",
+      "type": "object",
+      "required": ["nanodollars", "evidence"],
+      "properties": {
+        "nanodollars": {
+          "oneOf": [{ "$ref": "urn:purser:contracts:common:0.1.0#/$defs/nanodollars" }, { "type": "null" }]
+        },
+        "evidence": { "enum": ["reconciled", "unavailable"] },
+        "unavailable_reason": { "enum": ["pending_reconciliation", "not_reported", "not_billed"] }
+      },
+      "additionalProperties": false,
+      "if": { "properties": { "evidence": { "const": "unavailable" } }, "required": ["evidence"] },
+      "then": { "properties": { "nanodollars": { "type": "null" } }, "required": ["unavailable_reason"] },
+      "else": {
+        "properties": { "nanodollars": { "$ref": "urn:purser:contracts:common:0.1.0#/$defs/nanodollars" } },
+        "not": { "required": ["unavailable_reason"] }
+      }
+    },
+    "timing": {
+      "description": "Time to first byte and total duration (6.1). Unavailable with no_response when no byte came back.",
+      "type": "object",
+      "required": ["ttfb_ms", "duration_ms"],
+      "properties": {
+        "ttfb_ms": { "$ref": "#/$defs/relay_duration_ms" },
+        "duration_ms": { "$ref": "#/$defs/relay_duration_ms" }
+      },
+      "additionalProperties": false
+    }
+  }
+}
