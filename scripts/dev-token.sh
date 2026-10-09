@@ -4,6 +4,8 @@
 # Development-only credentials; this works only against the dev realm.
 # Usage: scripts/dev-token.sh [alice|bob]   (default bob)
 #   alice has TOTP, so her direct grant includes a code computed from her dev seed.
+#   Keycloak accepts each code once: a second alice token within the same
+#   30-second window fails; wait for the next window.
 #   Direct grants give acr=pwd. An acr=mfa token needs the browser flow
 #   (see controlplane tests).
 set -euo pipefail

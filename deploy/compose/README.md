@@ -55,6 +55,13 @@ Keycloak's network namespace (`network_mode: service:keycloak`) reach the same U
 other containers use `http://keycloak:58080`, which `KC_HOSTNAME_BACKCHANNEL_DYNAMIC` lets them
 use for discovery, JWKS, and the admin API.
 
+**Known dev-only exposure.** The port is bound to loopback, but Keycloak in dev mode answers any
+`Host` header and the master admin password above is published, so a malicious web page that
+DNS-rebinds its name to 127.0.0.1 could obtain a master-realm admin token on a machine running
+the stack. Only dev data is at stake; stop the stack (`make dev-down`) when you aren't using it.
+The dev realm files are not a template for production: write the production realm separately
+(brute-force protection, TLS required, no test clients, exact redirect URIs).
+
 **Realms are imported only when they don't exist.** After editing a file in `keycloak/realms/`,
 run `make dev-reset && make dev-up` (this also wipes the dev Postgres), or delete the realm in the
 admin console and restart the `keycloak` service.
@@ -94,14 +101,15 @@ creation; organizations carry the same attribute.
 
 **The admin-API client's roles** (on `realm-management`, granted to the service account and
 mapped into its token scope, with full scope off): `view-users`, `query-users`, `manage-users`,
-`view-events`, and `manage-realm`. Measured on Keycloak 26.8.0: the Organization endpoints return
-403 without `manage-realm`, even for reads, so it is required while the control plane creates
-organizations. It is broad (it covers realm settings and authentication flows); revisit when
-Keycloak offers a narrower organization permission. The client cannot list clients or reach the
-master realm (`make dev-check` asserts the first). For the production realm, note what
-`manage-realm` allows: changing authentication flows and admin-event settings, including the
-retention the reconciler depends on. The production client secret and its use are therefore as
-sensitive as the Keycloak admin credential.
+`view-events`, `manage-organizations`, `view-organizations`, `query-organizations`, and
+`view-realm` (read-only, so `make dev-check` can read the admin-event settings). Measured on
+Keycloak 26.8.0: with these, organization create, search by attribute, and member add succeed,
+while updating the realm, adding a key provider component, and writing authentication flows
+return 403. The client deliberately lacks `manage-realm`: holding it would let anyone with this
+client's secret add a signing key, forge tokens with any `sub`, `organization`, and `acr=mfa`,
+or weaken the step-up flow. `make dev-check` asserts that it can't add a component or list
+clients. `manage-users` is still strong (it can reset passwords and remove a second factor), so
+the production secret belongs in tier-0 storage alongside the Keycloak admin credential.
 
 ### Realm `purser-dev-other`
 

@@ -314,7 +314,10 @@
           "query-users",
           "manage-users",
           "view-events",
-          "manage-realm"
+          "manage-organizations",
+          "view-organizations",
+          "query-organizations",
+          "view-realm"
         ]
       }
     }
@@ -449,7 +452,10 @@
           "query-users",
           "manage-users",
           "view-events",
-          "manage-realm"
+          "manage-organizations",
+          "view-organizations",
+          "query-organizations",
+          "view-realm"
         ]
       }
     ]

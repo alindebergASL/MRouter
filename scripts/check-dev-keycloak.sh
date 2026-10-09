@@ -84,6 +84,12 @@ print("ok: admin events saved, 7-day retention, no representations")'
 code=$(curl -sS --noproxy '*' -o /dev/null -w '%{http_code}' -H "Authorization: Bearer $sa" "$base/admin/realms/$realm/clients")
 [ "$code" = 403 ] || fail "admin-API client can list clients (HTTP $code); it should not"
 echo "ok: admin-API client cannot list clients"
+# No manage-realm: it must not be able to add components (such as a signing
+# key). An empty body gets 400 if authorized and 403 if not, so nothing is created.
+code=$(curl -sS --noproxy '*' -o /dev/null -w '%{http_code}' -X POST -H "Authorization: Bearer $sa" \
+  -H 'Content-Type: application/json' -d '{}' "$base/admin/realms/$realm/components")
+[ "$code" = 403 ] || fail "admin-API client may add realm components (HTTP $code); it must not hold manage-realm"
+echo "ok: admin-API client cannot add realm components (no manage-realm)"
 
 echo "== second realm is a different issuer with different keys"
 other=$(token purser-dev-other purser-dev-test carol@other-dev.example carol-dev-only-not-a-secret)

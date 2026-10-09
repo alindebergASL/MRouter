@@ -32,7 +32,7 @@ dev-check: ## Smoke-check the dev stack's Keycloak (issuer, token claims, admin 
 	scripts/check-dev-keycloak.sh
 
 dev-token: ## Print a dev-realm access token: make dev-token WHO=alice|bob
-	@scripts/dev-token.sh $(or $(WHO),bob)
+	@scripts/dev-token.sh "$${WHO:-bob}"
 
 check-pins: ## Every Compose image is pinned by digest and pre-pulled by cloud-setup.sh
 	scripts/check-image-pins.sh
