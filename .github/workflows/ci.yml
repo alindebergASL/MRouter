@@ -1,0 +1,61 @@
+# Continuous integration. Later lanes add jobs here.
+
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  dev-stack:
+    name: dev-stack
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Start the dev stack
+        run: make dev-up
+
+      - name: Postgres answers select 1
+        run: |
+          out=$(docker compose -f deploy/compose/dev.yaml exec -T postgres \
+            psql -U purser_dev -d purser_dev -tAc 'select 1')
+          echo "select 1 -> $out"
+          test "$out" = "1"
+
+      - name: Show stack logs
+        if: failure()
+        run: docker compose -f deploy/compose/dev.yaml logs --no-color
+
+      - name: Stop the dev stack
+        if: always()
+        run: make dev-down
+
+  checks:
+    name: checks
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Images pinned and pre-pulled
+        run: make check-pins
+
+      - name: Protected-path hook self-test
+        run: make check-hooks
+
+      - name: Lint (shellcheck, actionlint)
+        run: make lint

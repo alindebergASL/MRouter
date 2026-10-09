@@ -1,0 +1,74 @@
+# Fails any pull request that touches a protected path unless it carries the
+# spec-change label (build plan §2.2). This check is the enforcement; the
+# Claude Code hook and CODEOWNERS are guardrails.
+#
+# Runs on pull_request_target, so the workflow file comes from the base branch
+# and a pull request can't change the check that judges it. That trigger has a
+# token for the base repository, so this workflow must never check out, build,
+# or run the pull request's code, and must never interpolate PR-controlled text
+# into a shell. It reads PR metadata through the API only.
+
+name: spec-guard
+
+on:
+  pull_request_target:
+    types: [opened, synchronize, reopened, labeled, unlabeled]
+
+permissions:
+  contents: read
+  pull-requests: read
+
+concurrency:
+  group: spec-guard-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  spec-guard:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Require the spec-change label for protected paths
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          PR: ${{ github.event.pull_request.number }}
+          LABEL: spec-change
+          # Keep in step with CLAUDE.md, .github/CODEOWNERS,
+          # .claude/hooks/protect-spec.sh, and scripts/check-protect-spec.sh.
+          PROTECTED: '^(contracts/|tests/acceptance/|docs/architecture\.md$|\.github/workflows/spec-guard\.yml$|\.github/CODEOWNERS$|\.claude/hooks/|\.claude/settings\.json$)'
+        run: |
+          set -euo pipefail
+
+          # Current and previous names, so a rename out of a protected path counts.
+          files=$(gh api --paginate "repos/$REPO/pulls/$PR/files" \
+            --jq '.[] | .filename, (.previous_filename // empty)' | sort -u)
+          protected=$(grep -E "$PROTECTED" <<<"$files" || true)
+
+          # Labels as they are now, not as they were when the event fired.
+          labels=$(gh api "repos/$REPO/issues/$PR/labels" --jq '.[].name')
+
+          {
+            echo "## spec-guard"
+            if [ -z "$protected" ]; then
+              echo "No protected paths changed."
+            else
+              echo "Protected paths changed:"
+              echo '```'
+              echo "$protected"
+              echo '```'
+            fi
+          } >>"$GITHUB_STEP_SUMMARY"
+
+          if [ -z "$protected" ]; then
+            echo "No protected paths changed."
+            exit 0
+          fi
+          echo "Protected paths changed:"
+          echo "$protected"
+          if grep -qxF "$LABEL" <<<"$labels"; then
+            echo "Label '$LABEL' present: allowed." | tee -a "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          echo "::error::This pull request changes protected paths but lacks the '$LABEL' label."
+          echo "Missing label '$LABEL': failing." >>"$GITHUB_STEP_SUMMARY"
+          exit 1

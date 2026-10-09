@@ -39,8 +39,18 @@ start_daemon() {
     warn "dockerd not found; cannot start the Docker daemon"
     return 1
   fi
-  log "Starting dockerd (log: $DOCKERD_LOG)"
-  setsid nohup dockerd >"$DOCKERD_LOG" 2>&1 </dev/null &
+  if pgrep -x dockerd >/dev/null 2>&1; then
+    log "dockerd is running but not answering yet; waiting for it"
+  else
+    # A pidfile left by an earlier run makes dockerd refuse to start if its PID
+    # now belongs to another process. No dockerd is running, so it's stale.
+    if [ -e /var/run/docker.pid ]; then
+      log "Removing stale /var/run/docker.pid"
+      rm -f /var/run/docker.pid
+    fi
+    log "Starting dockerd (log: $DOCKERD_LOG)"
+    setsid nohup dockerd >"$DOCKERD_LOG" 2>&1 </dev/null &
+  fi
   for _ in $(seq 1 "$DAEMON_WAIT_SECONDS"); do
     if docker info >/dev/null 2>&1; then
       log "Docker daemon is up"
