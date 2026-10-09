@@ -1,6 +1,8 @@
 # Purser: v1 Architecture and Guarantees
 
-Draft 0.5, 2026-10-07. Owner: Andrew Lindeberg. Product name chosen 2026-10-07; trademark and domain checks are still pending. Repository: https://github.com/alindebergASL/MRouter.
+Draft 0.6, 2026-10-09. Owner: Andrew Lindeberg. Product name chosen 2026-10-07; trademark and domain checks are still pending. Repository: https://github.com/alindebergASL/MRouter.
+
+Changes in 0.6: v1 is our hosted multi-tenant service, and the deployment models are named (1.1); people sign in through Keycloak per ADR 0003, and the control plane validates tokens against a configured OIDC issuer (4); orgs are isolated by org ID in every query and by Postgres row-level security, with guarantee A5 (4); every install generates its own secrets and keys through one idempotent bootstrap command, with guarantee D4 (9.1); the auth service added to the component table (9); the customer-hosted gateway widened to a self-hosted org install, and a dedicated per-org instance and personal mode deferred, each with an entry criterion (12).
 
 Changes in 0.5: containers are the default packaging for every service, with native packaging only where a container costs the user something real (section 9); image guarantees D1 to D3; container footprint added to the bake-off (10.2); hosted orchestration added to open questions.
 
@@ -27,7 +29,20 @@ This document defines what v1 does, what it promises, and how each promise is te
 | G5 | Admin console and admin API with MFA and SSO, where the console is a pure client of the API. |
 | G6 | Routing runs in shadow mode and is evaluated on cost per accepted task against a fixed-model baseline. |
 
-**Not in v1** (entry criteria in section 12): multi-region, budget leases, expected-cost (bounded) budgets, customer-hosted gateway, protocol translation between formats, adaptive routing in enforce mode, content-based sensitivity enforcement, prompt and response capture, GPU telemetry routing, MCP and A2A governance.
+**Deployment.** v1 is our hosted multi-tenant service, and that service is the revenue model. Customer orgs share one install. They are isolated by org ID in every query, backed by Postgres row-level security, and by Keycloak Organizations in one realm (section 4, ADR 0003).
+
+**Not in v1** (entry criteria in section 12): multi-region, budget leases, expected-cost (bounded) budgets, self-hosted org install, dedicated per-org instance, personal mode, protocol translation between formats, adaptive routing in enforce mode, content-based sensitivity enforcement, prompt and response capture, GPU telemetry routing, MCP and A2A governance.
+
+### 1.1 Deployment models
+
+| Model | Status | Who runs it | Orgs per install | People sign in through | Provider credentials held by |
+|---|---|---|---|---|---|
+| Hosted multi-tenant | v1 | Us, in AWS us-east-1 | Many, isolated (A5) | Keycloak: one realm, one Keycloak Organization per customer org | Our relay (3.2) |
+| Dedicated per-org instance | Deferred (12); premium tier | Us | One | Keycloak, in the instance's own realm | The instance's relay |
+| Self-hosted org install | Deferred (12) | The customer | One or more | Keycloak, in the customer's install | The customer's relay |
+| Personal mode | Deferred (12); possibly a free tier | One person, on their own machine | One org, one user | A built-in passkey or TOTP login; no Keycloak | The user. G2 and C1 are restated for this model before it is built (12). |
+
+Two rules hold in every model. The data model stays multi-org: an install with one org still has org IDs in every query and row-level security (4). Every install generates its own secrets and keys at first start, with no default credentials outside development (9.1, D4).
 
 ## 2. Components
 
@@ -48,7 +63,7 @@ This document defines what v1 does, what it promises, and how each promise is te
 
 - **Sidecar.** One binary in `--role sidecar`. Listens on 127.0.0.1 only. Handles harness autoconfiguration, device enrollment, forwarding to the relay, local models (metered, never billed), and shadow-routing logs. Holds no provider credentials.
 - **Relay.** The same binary in `--role relay`. Holds federated provider credentials, evaluates destination policy, reserves budget, dispatches upstream, settles usage. It is the only component that talks to paid providers. It accepts traffic from sidecars over mTLS, and on a separate public HTTPS listener from cloud-originated clients (Cursor) authenticated by per-user virtual keys.
-- **Control plane.** FastAPI, Postgres, and Next.js; the API and console ship as container images, and Postgres is a managed service (section 9). Owns identity, RBAC, the model catalog, the price book, budgets, the usage ledger, and audit. Its API is described in OpenAPI 3.1, with a generated TypeScript client and a contract drift check in CI, following WorkAgent's pattern.
+- **Control plane.** FastAPI, Postgres, and Next.js; the API and console ship as container images, and Postgres is a managed service (section 9). Owns identity (people sign in through Keycloak, section 4), RBAC, the model catalog, the price book, budgets, the usage ledger, and audit. Its API is described in OpenAPI 3.1, with a generated TypeScript client and a contract drift check in CI, following WorkAgent's pattern.
 - **Reservation ledger.** Tables in the control plane's Postgres, in the same region as the relay. The relay writes reservations directly in transactions. No prompt or response content is ever written to Postgres.
 
 The language for the sidecar/relay binary is decided by the bake-off in section 10. The control plane stack is independent of that decision.
@@ -64,7 +79,9 @@ These are two separate questions, answered per path.
 | Local model through the sidecar | No | The local model only | On the device only |
 | Managed relay (v1) | Yes, in relay memory for the duration of the request | The chosen provider | Relay: not persisted (C2). Provider: per that provider's policy and the customer's settings with it. For example, OpenAI documents separate abuse-monitoring and application-state retention. |
 | Cursor through the managed relay (v1, experimental) | Yes, as above | Cursor's backend first, then the chosen provider | As above, plus Cursor's own policies. The router cannot change what Cursor's backend receives. |
-| Customer-hosted gateway (deferred) | No. Metadata only. | The chosen provider | Customer-controlled |
+| Self-hosted org install (deferred) | Our service: no. It receives nothing by default; any telemetry to us is opt-in and metadata only. The customer's own relay receives content as the managed relay does. | The chosen provider | Customer-controlled |
+
+A dedicated per-org instance (deferred) handles content as the managed relay does, in an install that serves one org. In personal mode (deferred), the relay runs on the user's own machine and content goes only to the chosen provider.
 
 "We do not persist prompt bodies" is a relay policy. It is not an end-to-end zero-retention claim, which depends on the provider and the features enabled.
 
@@ -94,17 +111,22 @@ Acceptance test: configure a policy that denies destination X and send requests 
 
 ## 4. Identity and access
 
-- **People.** Built-in sign-in with MFA (TOTP and passkeys) for organizations without an identity provider. OIDC and SAML single sign-on plus SCIM provisioning for those with one. Use an established auth service rather than building this.
+- **People.** Keycloak, self-hosted (ADR 0003): one realm per install, with Keycloak Organizations as the customer-org primitive. It provides built-in sign-in with MFA (TOTP and passkeys) for organizations without an identity provider, and OIDC and SAML single sign-on for those with one. The control plane serves SCIM provisioning per org and drives Keycloak's admin API. Keycloak is off the traffic path: relay-token issuance reads our database only.
+- **Token validation.** The control plane validates tokens against a configured OIDC issuer, through the issuer's discovery document and JWKS, with a stock library. Nothing in the control plane is specific to Keycloak: the issuer is configuration, so another issuer can take its place (personal mode's built-in login, 12). A token from any issuer other than the configured one is rejected (A5).
 - **Devices.** Enrollment uses a device-authorization flow approved by the user. Each sidecar gets a keypair and an mTLS client certificate from the control plane's CA. Relay access uses short-lived tokens (15 minutes) bound to device and user. Revoking a device or user blocks new tokens immediately; outstanding tokens expire within 15 minutes.
 - **Harness to sidecar.** Loopback only. `connect` writes a per-harness local token, so requests are attributed to a harness and other local processes need that token to use the sidecar.
 - **Cloud-originated clients (Cursor).** A per-user virtual key, scoped to that client type and to the public listener, issued from the console. It is not a provider credential, so C1 still holds, and anything it spends passes through the same reservations. It carries no device binding, so it is revocable and rotatable on its own and subject to its own budget.
-- **RBAC.** Scopes are org → workspace → team → user. Roles are owner, admin, billing admin, member, and viewer. Model catalog states: proposed → approved → assigned (to groups) → deprecated → retired.
+- **RBAC.** Scopes are org → workspace → team → user. Roles are owner, admin, billing admin, member, and viewer. Above the orgs, the platform operator role administers the install itself and requires MFA; the first platform operator is the first admin the bootstrap creates (9.1). Model catalog states: proposed → approved → assigned (to groups) → deprecated → retired.
+- **Org isolation.** The data model is multi-org in every deployment model (1.1). Every query on org data filters by org ID. As defense in depth, every control-plane table that holds org data has a Postgres row-level security policy keyed on the request's org: the control plane sets the org on each transaction (for example `SET LOCAL purser.org_id`), and the policy admits only rows with that org ID. A query that forgets its org filter still returns nothing from another org, and a transaction with no org set sees no org rows. Policies are forced (`FORCE ROW LEVEL SECURITY`), and the request path's database role neither owns the tables nor has `BYPASSRLS`. Cross-org work (platform-operator views, migrations) runs under a separate database role, never the request path's.
 
 **A1. Every console action is available through the admin API.**
 Acceptance test: the CI drift check fails if the console calls any endpoint missing from the OpenAPI contract, or if the generated client differs from the contract.
 
 **A2. A revoked device makes no successful upstream attempt more than 15 minutes after revocation.**
 Acceptance test: revoke a device mid-session and confirm the relay rejects every request after token expiry. Record the measured gap.
+
+**A5. No org can read or change another org's data.**
+Acceptance test: create two orgs, A and B, each with users, devices, virtual keys, budgets, and usage. Call every control-plane API endpoint, every relay endpoint, and every budget-interface tool (7.8) with org A's credentials (user token, device token, virtual key) and org B's identifiers. Every call is refused, no response contains org B data, and no org B row changes. Then, with org A set on the transaction, run a query with no org filter against every control-plane table that holds org data: zero org B rows return. CI fails if any such table lacks a forced row-level security policy, or if the request path's role owns one or has `BYPASSRLS`. Finally, present a well-formed token signed by an issuer other than the configured one, including another install's realm, to every endpoint that accepts user tokens: every one rejects it.
 
 ## 5. Harness and protocol compatibility
 
@@ -499,15 +521,16 @@ Acceptance test: run the certification sessions (H1) with shadow routing on and 
 
 | Component | Where it runs | Packaging | Why |
 |---|---|---|---|
-| Relay | Our cloud (AWS us-east-1) | Container image, two listeners: mTLS for sidecars, public HTTPS with virtual-key authentication for cloud-originated clients (Cursor) | Long-running service; the same image later serves the customer-hosted gateway (12) |
+| Relay | Our cloud (AWS us-east-1) | Container image, two listeners: mTLS for sidecars, public HTTPS with virtual-key authentication for cloud-originated clients (Cursor) | Long-running service; the same image later serves the dedicated per-org instance and the self-hosted org install (12) |
 | Control plane API and console | Our cloud | Two container images | Same reason; they move on-premises unchanged, with no dependence on a cloud's static-hosting services |
+| Auth service (Keycloak) | Our cloud | Third-party container image (`quay.io/keycloak/keycloak`), pinned by digest, on its own hostname and load balancer, against its own Amazon RDS for PostgreSQL instance separate from the ledger (ADR 0003) | Sign-in and enrollment only. It is off the traffic path, so an outage blocks new sign-ins and enrollments, not metered traffic or token renewal. |
 | Sidecar in Kubernetes pods | Customer clusters | Container image as a native sidecar: an `initContainers` entry with `restartPolicy: Always`, stable since Kubernetes v1.33. It starts before the agent container and stops after it. | Pods are containers already |
 | Sidecar on servers and VMs with a container runtime | Customer hosts | Container image through Compose, listening on loopback only, with no published port. When the harness runs on the host, the sidecar uses host networking (Linux). When the harness runs in a container, it shares the sidecar's network namespace, as in a pod (D3). | Same image as pods; upgrades are an image pull |
 | Sidecar on servers and VMs without a container runtime | Customer hosts | Native binary as a systemd unit | A runtime installed only for us is a cost to the customer |
 | Sidecar on laptops | End-user devices | Native binary as a launchd, systemd, or Windows service, distributed by MDM or package managers. Static binaries for macOS (arm64, x86_64), Linux (x86_64, arm64), and Windows (x86_64). | See below |
 | `purser` CLI (`connect`, `run`) | Wherever the harness runs | Native binary | `run` launches the harness as a child process, and `connect` edits the harness's own configuration files |
 | Postgres (ledger and control plane) | Our cloud | Amazon RDS for PostgreSQL | Backups, point-in-time restore, and Multi-AZ failover are what the ledger needs, and running them ourselves adds nothing. Postgres runs as a container only in development, tests, and CI, pinned to the production major version. |
-| Secrets and keys | Our cloud | AWS KMS and Secrets Manager, read at run time through the service's IAM role | Never in an image (D2) |
+| Secrets and keys | Our cloud | Generated by the install bootstrap (9.1) into AWS KMS and Secrets Manager, read at run time through the service's IAM role | Never in an image (D2); never shared between installs or environments (D4) |
 | Development, tests, and CI | Laptops, Claude Code cloud sessions, GitHub Actions | One Compose stack: Postgres, mock providers, relay, control plane, console, and a fault-injection proxy | Same stack in all three places. Crash and partition tests (B1, B2, C2) need processes to kill and networks to cut, which containers make repeatable. |
 
 **Why not containers on laptops.** Developers who already run containers may use the image on a laptop, but Purser never requires one there:
@@ -524,7 +547,7 @@ Acceptance test: run the certification sessions (H1) with shadow routing on and 
 - **Registry:** CI pushes to Amazon ECR in us-east-1 through GitHub's OIDC federation to AWS, so no AWS key is stored in GitHub; our services pull with their IAM role. A public registry for customers' pods is chosen before the first pilot (G3 in the build plan).
 - **Releases:** images and installers are signed, and the control plane publishes the minimum supported sidecar version.
 
-**Hosted orchestration (proposed, open question 9).** Amazon ECS on Fargate for v1: there is no cluster to operate and no control-plane fee. EKS charges $0.10 per cluster-hour on standard Kubernetes version support ($73.00 for a 730-hour month) and $0.60 per cluster-hour on extended support ($438.00) when version upgrades lag. The Helm chart exists either way for customers' pods, and CI tests it on kind (Kubernetes in Docker). Revisit when the customer-hosted gateway starts.
+**Hosted orchestration (proposed, open question 9).** Amazon ECS on Fargate for v1: there is no cluster to operate and no control-plane fee. EKS charges $0.10 per cluster-hour on standard Kubernetes version support ($73.00 for a 730-hour month) and $0.60 per cluster-hour on extended support ($438.00) when version upgrades lag. The Helm chart exists either way for customers' pods, and CI tests it on kind (Kubernetes in Docker). Revisit when the self-hosted org install starts.
 
 **Guarantees**
 
@@ -536,6 +559,27 @@ Acceptance test: for each image and architecture, CI confirms that it runs as a 
 
 **D3. A containerized sidecar accepts connections only from its own host or pod.**
 Acceptance test: deploy through Compose and through the Helm chart (on kind). From the same host or pod, the harness connects with its local token. From another host, another pod, and another container on the same host's network, connections to the sidecar port are refused.
+
+### 9.1 Install bootstrap
+
+Every install and every environment is unique: development, staging, and production, and later each dedicated instance and self-hosted install. One command, `bootstrap`, run as a one-off control-plane task at first start, generates:
+
+- the Keycloak realm, its signing keys, and the control plane's admin-API client and its secret;
+- the control plane's own signing keys, including those for relay tokens (4);
+- the device CA (4);
+- the HMAC keys, including each org's key for trace deduplication (6.6);
+- the database credentials for Keycloak and the control plane, where the install creates them;
+- the first admin, who is also the first platform operator (4).
+
+Rules:
+
+- **Idempotent.** It creates what is missing and changes nothing that exists. Re-running it on a bootstrapped install changes nothing: it never rotates a key and never creates a second admin. Rotation is a separate, explicit operation.
+- **Generated, never shipped.** Material comes from a cryptographically secure random source inside the install and is written only to the install's secret store (AWS Secrets Manager and KMS when we host it). None of it appears in an image, the repository, a Compose file, a Helm chart's values, or a log.
+- **No default credentials outside development.** The development Compose stack may use fixed, published credentials, listed in the repository as known defaults. Every other profile refuses to start with any credential on that list. Keycloak's temporary bootstrap admin is generated, used only by the bootstrap, and deleted when it finishes.
+- **The first admin** receives a one-time credential through the secret store, never a log. It expires at first sign-in, where the admin sets their own credential and enrolls MFA, which the platform operator role requires from then on.
+
+**D4. Every install has its own secrets and keys, and no usable default credential.**
+Acceptance test: bootstrap two fresh installs from the same images and configuration in a non-development profile, and collect everything the bootstrap generated. No secret, private key, or HMAC key is byte-equal between the two, and no public-key or certificate fingerprint matches. Against each fresh install, try every credential found in the repository, the images, the Compose files, and the Helm chart, plus each component's upstream defaults (for example Keycloak's `admin`/`admin` and Postgres's `postgres` user), on every endpoint that authenticates: the console and admin API, Keycloak's admin console and admin API, Postgres, both relay listeners, and device enrollment. Every attempt is rejected. Running the bootstrap a second time changes no stored secret or key and creates no second admin. Starting any service outside development with a credential from the known-default list fails.
 
 ## 10. Foundation decision: bake-off
 
@@ -583,7 +627,9 @@ Acceptance test: replay the same synthetic turns directly and through the router
 |---|---|---|
 | Budget leases and multi-region | The reservation performance target (7.7) is missed in measurement | Fencing tokens. A lease is never reallocated until its holder's attempts are reconciled or the maximum billable duration (provider timeout plus maximum stream length) has passed. |
 | Expected-cost (bounded) budgets | Strict-mode held headroom is a measured top complaint | The overrun bound is defined over globally outstanding billable attempts, including retries and unknown outcomes. Unknown attempts retain their reservation and their unreserved risk allowance. |
-| Customer-hosted gateway | First customer requiring it | Same image in the relay role, deployed by Helm chart or Compose; telemetry is metadata only. |
+| Self-hosted org install | The first design partner or paying customer who requires it | The full stack (Keycloak, Postgres, control plane, relay) as a Compose file and a Helm chart, from the same images we run. The same bootstrap (9.1), so D4 holds for each install. Postgres is the customer's managed instance or a container they operate. Our service receives nothing by default; any telemetry to us is opt-in and metadata only (3.1). |
+| Dedicated per-org instance (premium tier) | The first customer who will pay for it | The hosted images and bootstrap, one org per install, with its own realm, databases, and keys (D4). The data model stays multi-org (1.1). |
+| Personal mode (possibly a free tier) | After the release candidate (gate G4 in the build plan) | One person, shipped as a container, with no Keycloak: a built-in passkey or TOTP login serves as the configured OIDC issuer (4). The user holds their own provider keys, so G2 and C1 are restated per deployment model, each with its acceptance test, before work starts. The data model stays multi-org (1.1). |
 | Protocol translation routes | A named harness/provider pair with demand | Each pair passes H1 on recorded traffic. The candidate implementation is Switchyard's `switchyard-translation` crate, which translates requests, responses, and streams between OpenAI Chat, OpenAI Responses, and Anthropic Messages. Claude Code with non-Claude models is an explicit, labeled-unsupported opt-in. |
 | Adaptive routing in enforce mode | The 8.4 experiment shows lower cost per accepted task | Pre-registered rule met. |
 | Content-based sensitivity enforcement | A classifier evaluated with measured recall on labeled data | Advisory at first; destination policy remains authoritative. |
