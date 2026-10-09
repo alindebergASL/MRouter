@@ -12,7 +12,9 @@ name: spec-guard
 
 on:
   pull_request_target:
-    types: [opened, synchronize, reopened, labeled, unlabeled]
+    # edited: retargeting a pull request to another base branch changes its
+    # diff without a new commit.
+    types: [opened, synchronize, reopened, edited, labeled, unlabeled]
 
 permissions:
   contents: read
@@ -39,9 +41,22 @@ jobs:
         run: |
           set -euo pipefail
 
-          # Current and previous names, so a rename out of a protected path counts.
-          files=$(gh api --paginate "repos/$REPO/pulls/$PR/files" \
-            --jq '.[] | .filename, (.previous_filename // empty)' | sort -u)
+          # One line per changed file: current name, then previous name if renamed,
+          # so a rename out of a protected path counts.
+          entries=$(gh api --paginate "repos/$REPO/pulls/$PR/files" \
+            --jq '.[] | [.filename, (.previous_filename // "")] | @tsv')
+          listed=$(grep -c . <<<"$entries" || true)
+          changed=$(gh api "repos/$REPO/pulls/$PR" --jq '.changed_files')
+
+          # The files API stops at 3,000 files without saying so. Fail closed
+          # rather than judge a partial list.
+          if [ "$changed" -ge 3000 ] || [ "$listed" -ne "$changed" ]; then
+            msg="Cannot list every changed file (changed_files=$changed, listed=$listed). Split the pull request."
+            echo "::error::$msg"
+            echo "## spec-guard: $msg" >>"$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+          files=$(tr '\t' '\n' <<<"$entries" | { grep -v '^$' || true; } | sort -u)
           protected=$(grep -E "$PROTECTED" <<<"$files" || true)
 
           # Labels as they are now, not as they were when the event fired.
