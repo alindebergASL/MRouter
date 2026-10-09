@@ -4,9 +4,10 @@
 - Date: 2026-10-09
 - Deciders: Andrew Lindeberg
 - Guarantees affected: none changed. Referenced: G5, A1 (every console action available by
-  API), A2 (revoked device makes no upstream attempt after 15 minutes; needs user-lifecycle
-  events from the auth service), §4 "Devices" (device-authorization enrollment), C1 (the auth
-  service is outside the provider-credential path).
+  API), A2 ("a revoked device makes no successful upstream attempt more than 15 minutes after
+  revocation"; §4 extends revocation to users, so the control plane must learn of a user
+  disable promptly), §4 "Devices" (device-authorization enrollment), C1 (the auth service is
+  outside the provider-credential path).
 
 ## Context
 
@@ -30,9 +31,13 @@ building this". Build plan §6 makes the choice part of gate G0, and Lane D's ne
   by the auth service, and the control plane then issues the device's mTLS certificate and
   15-minute relay tokens. In both cases the control plane's CA, not the auth service, signs
   device certificates, so the auth service never touches relay access.
-- **Lifecycle.** When a user is disabled, deleted, or deprovisioned by SCIM, the auth service
-  must tell the control plane promptly so that the user's devices are revoked and A2's
-  15-minute bound holds for the user as well as the device.
+- **Lifecycle.** When a user is disabled, deleted, or deprovisioned by SCIM, the control plane
+  must learn of it promptly so that the user's devices are revoked and A2's 15-minute bound
+  holds for the user as well as the device. Because A1 routes every admin operation through
+  our API, and the SCIM endpoint is ours (below), the control plane is the source of those
+  changes in the normal case. An event or webhook from the auth service (R14) covers changes
+  made behind our back, and relay-token issuance re-checks the user's state in the auth service
+  so that even a change made there directly takes effect within one 15-minute token lifetime.
 - **C1.** The auth service never holds provider credentials, federation tokens, or data keys.
   It authenticates people and nothing else.
 
@@ -75,7 +80,9 @@ Rubrics for the four qualitative rows:
 
 - **Ops.** 2: hosted, nothing to run. 1: one or two stateless containers plus Postgres, with
   frequent releases and no long-term-support line; or hosted but we must build a substantial
-  piece ourselves. 0: three or more services to run, or two products to wire together.
+  piece ourselves (more than a device-flow server, which the control plane can run for any
+  candidate; Cognito's SCIM server and per-customer IdP provisioning count, Stytch's device
+  flow alone does not). 0: three or more services to run, or two products to wire together.
 - **Cost.** 2: published, and at most $500 per month at the reference configuration (1,000 MAU,
   20 customer SSO connections). 1: published and above $500, or not published. 0: a feature we
   require exists only in a tier whose price is not published. Self-hosted options are priced on
@@ -89,14 +96,14 @@ Rubrics for the four qualitative rows:
 
 ### Candidates
 
-Required by the task: Keycloak, ZITADEL, Ory (Kratos and Hydra self-hosted, and Ory Network),
+Named in the session brief: Keycloak, ZITADEL, Ory (Kratos and Hydra self-hosted, and Ory Network),
 authentik, WorkOS, Auth0 (Okta Customer Identity Cloud), Amazon Cognito, FusionAuth. Added
 because they fit the shape of the problem: Logto, SuperTokens, Stytch (B2B), Clerk.
 
 Considered but not scored, one line each (sources in the appendix):
 
-- **Descope**: covers every requirement including RFC 8628, but is hosted only with no
-  self-hostable container; Pro "starts at $249/mo billed annually".
+- **Descope**: covers every requirement except R12, including RFC 8628, but is hosted only with
+  no self-hostable container; Pro "starts at $249/mo billed annually".
 - **Frontegg**: hosted only; passkeys and device flow not documented on any fetched page.
 - **Hanko**: AGPL-3.0 backend with passkeys and TOTP, but no SCIM and organizations are still
   marked in progress.
@@ -119,10 +126,10 @@ vendor has both and they differ, the cell says which. Footnote numbers refer to 
 | R2 passkeys | yes, "supported" since 26.4 [2] | yes [12] | yes [21] | yes [32] | yes, hosted UI only [42] | yes [52] | partial: Essentials plan, USER_AUTH flow only [62] | partial: free "Licensed Community" key; cross-platform authenticators Enterprise [72] | yes [82] | yes [92] | no: B2B MFA lists SMS and TOTP only [101] | partial: Pro plan or above [112] |
 | R3 OIDC SSO per org | yes [3] | yes [13] | partial: Ory Network Growth (max 3 orgs) or Enterprise; not in open source [22] | partial: sources are global, no org boundary [33] | yes [43] | yes [53] | partial: IdP objects per pool, no org [63] | yes, per tenant [73] | yes [83] | partial: per-tenant OIDC, paid multi-tenancy [93] | yes [102] | partial: Pro plan plus $100/mo B2B add-on to link to an org [113] |
 | R4 SAML SSO per org | yes [3] | yes [13] | partial: Enterprise only [22] | partial [33] | yes [43] | yes [53] | partial [64] | yes [73] | yes [83] | partial: paid, Core 12+, Node/Python SDKs [94] | yes [102] | partial [113] |
-| R5 SCIM per org | partial: built-in SCIM is realm-scoped (supported in 26.8); per-org only via Phase Two extension, experimental, Elastic License 2 [4] | partial: Preview, per-org URL, Users only, no Groups [14] | partial: Enterprise, beta [23] | partial: per-source endpoint, tenant-wide matching [34] | yes [44] | yes, included on all plans [54] | no [65] | partial: Enterprise plan only [74] | no, open request [84] | no [95] | yes [103] | partial: no API to enable it; $75/connection from 2027 [114] |
+| R5 SCIM per org | partial: built-in SCIM is realm-scoped (experimental in April 2026, preview in 26.7, "promoted from preview to supported" in 26.8 [2]); per-org only via Phase Two extension, experimental, Elastic License 2 [4] | partial: Preview, per-org URL, Users only, no Groups [14] | partial: Enterprise, beta [23] | partial: per-source endpoint, tenant-wide matching [34] | yes [44] | yes, included on all plans [54] | no [65] | partial: Enterprise plan only [74] | no, open request [84] | no [95] | yes [103] | partial: no API to enable it; $75/connection from 2027 [114] |
 | R6 orgs; our RBAC | yes / yes [3] | yes / yes [15] | yes / yes on Network; no orgs in open source [22] | no: no org object; tenancy is alpha, schema-per-tenant [35] | yes / partial: every membership carries a WorkOS role [45] | yes / yes [55] | partial: patterns, no object / yes [66] | partial: tenants, not orgs / yes [75] | yes / yes [85] | partial: tenants are separate user pools / yes [96] | yes / partial: Stytch RBAC is canonical for SCIM group mapping and portal [104] | yes / partial: every member carries a Clerk org role [115] |
-| R7 device flow | yes, native [5] | yes, native [16] | yes, native in Hydra 25.4+ [24] | yes, native; flow must be hand-built [36] | yes, native ("CLI Auth") [46] | partial: native, but "does not natively support the Organizations feature" [56] | partial: not native; AWS documents a build-on-top pattern [67] | yes, native [76] | yes, native since 1.38.0 [86] | partial: build on top [97] | partial: build on top [105] | partial: native, beta, per-app enablement [116] |
-| R8 discovery + JWKS | yes [5] | yes [17] | yes for Hydra; Kratos sessions need the session-to-JWT tokenizer [25] | yes [37] | yes [47] | yes [57] | yes [68] | yes [77] | yes [87] | partial: session JWTs are not OIDC tokens; OIDC needs paid Unified Login [98] | partial: JWKS endpoint needs project Basic auth [106] | yes [117] |
+| R7 device flow | yes, native [5] | yes, native [16] | yes, native in Hydra 25.4+ [24] | partial: native endpoints, but "authentik does not include a default flow for this use case" [36] | yes, native ("CLI Auth") [46] | partial: native, but "does not natively support the Organizations feature" [56] | partial: not native; AWS documents a build-on-top pattern [67] | yes, native [76] | yes, native since 1.38.0 [86] | partial: build on top [97] | partial: build on top [105] | partial: native, beta, per-app enablement [116] |
+| R8 discovery + JWKS | yes [5] | yes [17] | partial: yes for Hydra; Kratos sessions need the session-to-JWT tokenizer [25] | yes [37] | yes [47] | yes [57] | yes [68] | yes [77] | yes [87] | partial: session JWTs are not OIDC tokens; OIDC needs paid Unified Login [98] | partial: JWKS endpoint needs project Basic auth [106] | yes [117] |
 | R9 Next.js | partial: generic OIDC (Auth.js provider) [6] | partial: generic (next-auth example) [18] | yes: @ory/nextjs [26] | partial: generic (Auth.js provider) [38] | yes: @workos-inc/authkit-nextjs [48] | yes: @auth0/nextjs-auth0 [58] | partial: Amplify adapter, server-side "experimental" [69] | partial: generic OIDC [78] | yes: @logto/next [88] | yes [99] | yes: @stytch/nextjs [107] | yes: @clerk/nextjs [118] |
 | R10 admin API + self-service | partial: all operations by API (verified in the OpenAPI document); no customer-facing SSO/SCIM portal; per-org SCIM gap [7] | partial: all by API, v1 management API deprecated in favour of v2; customers can use ZITADEL's console per org, not embeddable [19] | partial: Console API plus hosted onboarding portal links; SAML and SCIM Enterprise only [27] | partial: full OpenAPI; no orgs; no customer portal [39] | partial: all by API except creating a SCIM directory (portal or dashboard only); no user-level deactivate; hosted Admin Portal [49] | yes: all by API; Self-Service SSO with SCIM token generation included on Free, Essentials, Professional [59] | partial: all by API; no SCIM, no portal, no org object [70] | partial: all by API; no customer portal; SCIM Enterprise [79] | partial: all by API; no SCIM; no portal [89] | partial: no SCIM, no invite, no deactivate (delete only), no portal [100] | yes: full API plus AdminPortalSSO and AdminPortalSCIM components [108] | partial: no API to enable Directory Sync; self-serve SSO inside OrganizationProfile [119] |
 | R11 us-east-1 | yes: self-host on ECS or EKS, Aurora PostgreSQL tested [8] | yes self-host; Cloud is GCP us-central1 [20] | partial: region named only by example; provider not named [28] | yes: official ECS CloudFormation and Helm [40] | partial: AWS subprocessor; region not published [50] | partial: US region on AWS; exact region not published [60] | yes: cognito-idp.us-east-1 [68] | yes self-host; Cloud regions page not found [80] | yes self-host; Cloud is Azure (West US Arizona) [90] | yes: self-host; managed "US East (N. Virginia)" [99] | partial: "exclusively out of U.S. servers", no region selection [109] | no: Google Cloud, "does not offer regional data residency or region selection" [120] |
@@ -238,10 +245,10 @@ Raw cells: 2 = yes, 1 = partial, 0 = no. Weighted total out of 70.
 | Logto | 2 | 2 | 2 | 2 | 0 | 2 | 2 | 2 | 2 | 1 | 2 | 2 | 2 | 1 | 1 | 2 | 2 | 0 | **54** |
 | WorkOS | 2 | 2 | 2 | 2 | 2 | 1 | 2 | 2 | 2 | 1 | 1 | 0 | 2 | 1 | 2 | 1 | 1 | 1 | **51** |
 | FusionAuth | 2 | 1 | 2 | 2 | 1 | 1 | 2 | 2 | 1 | 1 | 2 | 2 | 1 | 2 | 1 | 1 | 1 | 2 | **51** |
-| Ory Network | 2 | 2 | 1 | 1 | 1 | 2 | 2 | 2 | 2 | 1 | 1 | 1 | 2 | 1 | 2 | 0 | 1 | 2 | **50** |
+| Ory Network | 2 | 2 | 1 | 1 | 1 | 2 | 2 | 1 | 2 | 1 | 1 | 1 | 2 | 1 | 2 | 0 | 1 | 2 | **49** |
 | Stytch B2B | 2 | 0 | 2 | 2 | 2 | 1 | 1 | 1 | 2 | 2 | 1 | 0 | 2 | 1 | 2 | 1 | 1 | 2 | **49** |
-| authentik | 2 | 2 | 1 | 1 | 1 | 0 | 2 | 2 | 1 | 1 | 2 | 2 | 2 | 1 | 1 | 2 | 2 | 0 | **45** |
-| SuperTokens | 1 | 2 | 1 | 1 | 0 | 1 | 1 | 1 | 2 | 1 | 2 | 1 | 1 | 1 | 1 | 1 | 2 | 2 | **41** |
+| authentik | 2 | 2 | 1 | 1 | 1 | 0 | 1 | 2 | 1 | 1 | 2 | 2 | 2 | 1 | 1 | 2 | 2 | 0 | **43** |
+| SuperTokens | 1 | 2 | 1 | 1 | 0 | 1 | 1 | 1 | 2 | 1 | 2 | 1 | 1 | 1 | 1 | 0 | 2 | 2 | **39** |
 | Amazon Cognito | 2 | 1 | 1 | 1 | 0 | 1 | 1 | 2 | 1 | 1 | 2 | 0 | 2 | 1 | 1 | 2 | 0 | 2 | **38** |
 | Clerk | 1 | 1 | 1 | 1 | 1 | 1 | 1 | 2 | 2 | 1 | 0 | 0 | 1 | 1 | 2 | 1 | 1 | 1 | **37** |
 
@@ -266,11 +273,13 @@ the customer-org primitive.
 
 Why Keycloak over the field:
 
-- It is the only candidate that is "yes" on every hard requirement we cannot build around (TOTP,
-  passkeys, per-org OIDC and SAML, first-class orgs that leave RBAC to us, native RFC 8628,
-  standard discovery and JWKS, client credentials) *and* ships as an Apache-2.0 container we can
-  later hand to a customer-hosted deployment [1][2][3][5][9]. Every hosted leader fails R12, and
-  §9 makes containers the default.
+- Three self-hostable candidates are "yes" on every hard requirement we cannot build around
+  (TOTP, passkeys, per-org OIDC and SAML, first-class orgs that leave RBAC to us, native RFC
+  8628, standard discovery and JWKS, client credentials) and ship as a container: Keycloak,
+  ZITADEL, and Logto [1][2][3][5][9][11][16][20][81][86][90]. Keycloak separates from the other
+  two on license (Apache-2.0 against AGPL-3.0 and MPL-2.0, which matters for the customer-hosted
+  case) and on security record (next bullet). Every hosted leader fails R12, and §9 makes
+  containers the default.
 - Its two gaps are ones we were going to build anyway. The realm-scoped SCIM API cannot be given
   to N customers, so the control plane serves SCIM per org and drives Keycloak's admin API, whose
   organization, invitation, user, and credential endpoints we verified in the published OpenAPI
@@ -311,18 +320,27 @@ For Lane D's next tasks:
   owns the SCIM 2.0 endpoint per org (per-org bearer tokens, stored hashed) and translates to
   Keycloak admin-API calls plus our own team and role tables.
 - **Task 3 (device enrollment).** The sidecar runs Keycloak's device-authorization grant against a
-  public client; the control plane accepts the resulting token, binds device to user, and issues
-  the mTLS certificate from our CA. Revocation stays ours: disabling a user through our API
-  disables the Keycloak user and revokes the device, which is what A2 measures.
+  public client configured to issue no refresh or offline tokens; the control plane accepts the
+  resulting access token once, binds device to user, issues the mTLS certificate from our CA,
+  and discards the token. Revocation stays ours: disabling a user through our API disables the
+  Keycloak user and revokes the device, which is what A2 measures. Each 15-minute relay-token
+  issuance also checks that the user is still enabled in Keycloak, so a disable made directly in
+  Keycloak's admin console (break-glass only; day-to-day administration goes through our API)
+  takes effect within one token lifetime.
 - **Console.** Plain OIDC through Auth.js; self-service SSO setup is a console page calling our API,
   which calls Keycloak's organization identity-provider endpoints.
 - **Dev stack.** Add Keycloak to `deploy/compose/dev.yaml` from `quay.io/keycloak/keycloak`, pinned
   by digest and pre-pulled by `scripts/cloud-setup.sh` so `make check-pins` passes; a second
   database in the dev Postgres. Never `start-dev` outside development.
 - **Production.** A separate RDS instance from the ledger (the ledger's transaction profile must
-  not share a database with a session store), Multi-AZ, with Keycloak behind the control plane's
-  load balancer on its own hostname. Pin the Keycloak version and upgrade on a monthly cadence
-  with the release notes read first.
+  not share a database with a session store), Multi-AZ, with Keycloak on its own hostname behind
+  its own load balancer (the one priced in footprint F). Its bootstrap admin credential, database
+  password, and the control plane's admin-API client secret live in AWS Secrets Manager and are
+  read at run time through the task's IAM role, never baked into an image (§9, D2). D2's image
+  checks are written for images we publish; the Keycloak image is third-party, pinned by digest,
+  and run as a non-root user with a read-only root filesystem where its documentation allows.
+  Adding the auth service to §9's component table is a spec change for a later PR. Pin the
+  Keycloak version and upgrade on a monthly cadence with the release notes read first.
 - **Do not** adopt Phase Two's extensions: their Elastic License 2 would have to be reviewed for
   the customer-hosted case, and the SCIM they add is experimental; our control plane covers it.
 
