@@ -15,4 +15,8 @@ SELECT 'CREATE DATABASE keycloak OWNER keycloak_dev'
 WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'keycloak')
 \gexec
 
+-- Each database admits only its own roles: Keycloak's role can't connect to
+-- purser_dev, and other roles can't connect to keycloak. Roles that need
+-- purser_dev get CONNECT explicitly.
 REVOKE ALL ON DATABASE keycloak FROM PUBLIC;
+REVOKE CONNECT, TEMPORARY ON DATABASE purser_dev FROM PUBLIC;

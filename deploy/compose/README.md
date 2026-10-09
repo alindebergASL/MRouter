@@ -24,7 +24,7 @@ SessionStart hook starts it), and in GitHub Actions (`.github/workflows/ci.yml`)
 | Service | Image | Host address | Credentials |
 |---|---|---|---|
 | `postgres` | `postgres:18.6-trixie` from public ECR, pinned by digest (ADR 0002) | `127.0.0.1:55432` | user `purser_dev`, password `purser-dev-only-not-a-secret`, database `purser_dev` |
-| `keycloak-db-init` | same Postgres image; one-shot | none | creates role `keycloak_dev` (password `keycloak-db-dev-only-not-a-secret`) and database `keycloak` |
+| `keycloak-db-init` | same Postgres image; one-shot | none | creates role `keycloak_dev` (password `keycloak-db-dev-only-not-a-secret`) and database `keycloak`; revokes PUBLIC's CONNECT on both databases, so each admits only its own roles |
 | `keycloak` | `quay.io/keycloak/keycloak:26.8.0`, pinned by digest (ADR 0003) | `127.0.0.1:58080` | bootstrap admin `admin` / `keycloak-admin-dev-only-not-a-secret` (master realm) |
 
 Connection string: `postgresql://purser_dev:purser-dev-only-not-a-secret@127.0.0.1:55432/purser_dev`.
@@ -75,10 +75,12 @@ Every credential below is development-only and not a secret; each ends in `-dev-
 | Client `purser-dev-shortlived` | As `purser-dev-test` with 2-second access tokens: for expiry tests. |
 
 **Tokens carry identifiers and levels only.** The realm defines its own minimal client scopes in
-place of Keycloak's defaults. An access token for the admin API has `iss`, `sub`, `aud`
-(`purser-admin-api`), `azp`, `acr`, `auth_time`, `scope`, and `organization` as
-`{"<alias>": {"id": "<organization id>"}}`. The control plane keys on the ID, because aliases can
-change. Name and email go in the ID token only, for the console.
+place of Keycloak's defaults. An access token for the admin API has `sub`, `aud`
+(`purser-admin-api`), `acr`, and `organization` as `{"<alias>": {"id": "<organization id>"}}`,
+plus token metadata: `iss`, `azp`, `scope`, `sid`, `allowed-origins`, `exp`, `iat`, `jti`, `typ`,
+and on browser logins `auth_time`. `make dev-check` fails on any claim outside that list. The
+control plane keys on the organization ID, because aliases can change. Name and email go in the ID
+token only, for the console.
 
 **Step-up authentication.** The browser flow `browser-step-up` maps levels of authentication to
 `acr` values (`acr.loa.map`): level 1 `pwd` is a password; level 2 `mfa` adds TOTP or a passkey
@@ -96,7 +98,10 @@ mapped into its token scope, with full scope off): `view-users`, `query-users`, 
 403 without `manage-realm`, even for reads, so it is required while the control plane creates
 organizations. It is broad (it covers realm settings and authentication flows); revisit when
 Keycloak offers a narrower organization permission. The client cannot list clients or reach the
-master realm (`make dev-check` asserts the first).
+master realm (`make dev-check` asserts the first). For the production realm, note what
+`manage-realm` allows: changing authentication flows and admin-event settings, including the
+retention the reconciler depends on. The production client secret and its use are therefore as
+sensitive as the Keycloak admin credential.
 
 ### Realm `purser-dev-other`
 

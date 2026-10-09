@@ -2,7 +2,8 @@
 # Smoke-check the dev stack's Keycloak (ADR 0003) from the host:
 #   - the purser-dev discovery document names the fixed issuer;
 #   - a test token carries the admin-API audience, the subject, and the
-#     acme-dev organization ID, and nothing that isn't an identifier or level;
+#     acme-dev organization ID, and no claim outside an allowlist of
+#     identifiers, levels, and token metadata;
 #   - the control plane's admin-API client can read the realm, which has admin
 #     events saved with 7-day retention and without representations;
 #   - the second realm is a different issuer with different keys.
@@ -40,8 +41,8 @@ got=$(json 'import json,sys; print(json.load(sys.stdin)["issuer"])' <<<"$disc")
 echo "ok: issuer $got"
 
 echo "== test token (bob, purser-dev-test)"
-tok=$(token "$realm" purser-dev-test bob@acme-dev.example bob-dev-only-not-a-secret)
-claims "$tok" | json '
+bob_tok=$(token "$realm" purser-dev-test bob@acme-dev.example bob-dev-only-not-a-secret)
+claims "$bob_tok" | json '
 import json, sys
 d = json.load(sys.stdin); h, c = d["header"], d["claims"]
 iss, org_id, sub = sys.argv[1:4]
@@ -52,14 +53,17 @@ assert "purser-admin-api" in aud, aud
 assert c["sub"] == sub, c["sub"]
 assert c["acr"] == "pwd", c["acr"]
 assert c["organization"] == {"acme-dev": {"id": org_id}}, c["organization"]
-# Access tokens carry identifiers and levels only: no name, email, or roles.
-for k in ("email", "name", "preferred_username", "given_name", "realm_access", "resource_access"):
-    assert k not in c, k
-print("ok: aud, sub, acr=pwd, organization id; no profile claims")' "$issuer" "$org_id" "$bob_id"
+# Access tokens carry identifiers, levels, and token metadata only. An allowlist,
+# so a new profile or role claim fails here. (auth_time appears on browser logins.)
+allowed = {"iss", "sub", "aud", "azp", "acr", "auth_time", "organization", "scope", "sid",
+           "allowed-origins", "exp", "iat", "jti", "typ"}
+extra = set(c) - allowed
+assert not extra, f"unexpected access-token claims: {sorted(extra)}"
+print("ok: aud, sub, acr=pwd, organization id; only allowlisted claims")' "$issuer" "$org_id" "$bob_id"
 
 echo "== audience absent on purser-dev-noaud"
-tok=$(token "$realm" purser-dev-noaud bob@acme-dev.example bob-dev-only-not-a-secret)
-claims "$tok" | json '
+noaud_tok=$(token "$realm" purser-dev-noaud bob@acme-dev.example bob-dev-only-not-a-secret)
+claims "$noaud_tok" | json '
 import json, sys
 c = json.load(sys.stdin)["claims"]
 assert "purser-admin-api" not in str(c.get("aud")), c.get("aud")
@@ -89,6 +93,6 @@ dec = lambda t, i: json.loads(base64.urlsafe_b64decode(t.split(".")[i] + "=" * (
 a, b = sys.argv[1], sys.argv[2]
 assert dec(a, 1)["iss"] != dec(b, 1)["iss"]
 assert dec(a, 0)["kid"] != dec(b, 0)["kid"]
-print("ok:", dec(b, 1)["iss"])' "$tok" "$other" </dev/null
+print("ok:", dec(b, 1)["iss"])' "$bob_tok" "$other" </dev/null
 
 echo "Keycloak dev realm checks passed."

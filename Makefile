@@ -11,7 +11,7 @@ help: ## List targets
 	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  %-12s %s\n", $$1, $$2}'
 
 dev-up: ## Start the dev stack and wait until every service is healthy
-	$(COMPOSE) up -d --wait --wait-timeout 180
+	$(COMPOSE) up -d --wait --wait-timeout 300
 
 dev-down: ## Stop the dev stack (keeps data volumes)
 	$(COMPOSE) down
