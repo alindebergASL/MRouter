@@ -1,0 +1,249 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:purser:contracts:common:0.1.0",
+  "title": "Purser common definitions",
+  "description": "Shared definitions referenced by every other contract: money, exact decimals, identifiers, timestamps, evidence tiers (architecture 6.5), and evidenced values. String formats listed under $defs are the only patterned strings the no-free-text lint accepts in event schemas (C2, C4); each is bounded and admits no whitespace. This document validates nothing on its own.",
+  "$defs": {
+    "schema_version": {
+      "description": "Version of the contract an instance conforms to. Any 0.1.x instance is valid under the 0.1.0 schemas.",
+      "type": "string",
+      "pattern": "^0\\.1\\.(0|[1-9][0-9]{0,5})$",
+      "maxLength": 12
+    },
+    "uuid": {
+      "description": "Lowercase RFC 9562 UUID text form. Used for attempt, decision, and event IDs.",
+      "type": "string",
+      "format": "uuid",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+      "maxLength": 36
+    },
+    "id": {
+      "description": "Opaque identifier (org, workspace, team, user, device, virtual key, route, window, session, prompt, provider request, price-book version, key, fee). Letters, digits, and . _ : - only: no whitespace, so it cannot hold prose.",
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$",
+      "maxLength": 128
+    },
+    "model_id": {
+      "description": "Provider model identifier, such as claude-opus-5-5 or anthropic/claude-opus-5-5 (OpenRouter). Adds / @ + to the id alphabet.",
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:/@+-]{0,159}$",
+      "maxLength": 160
+    },
+    "semver": {
+      "description": "Dotted numeric version with an optional pre-release suffix, such as 2.1.285 or 0.48.0-beta.1.",
+      "type": "string",
+      "pattern": "^(0|[1-9][0-9]{0,8})\\.(0|[1-9][0-9]{0,8})\\.(0|[1-9][0-9]{0,8})(-[0-9A-Za-z-]{1,32}([.][0-9A-Za-z-]{1,32}){0,4})?$",
+      "maxLength": 128
+    },
+    "hmac_hex": {
+      "description": "Lowercase hex HMAC-SHA256 digest.",
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$",
+      "maxLength": 64
+    },
+    "rfc3339_utc": {
+      "description": "RFC 3339 timestamp in UTC with a Z suffix and up to nanosecond precision. The pattern enforces it; format is an annotation only.",
+      "type": "string",
+      "format": "date-time",
+      "pattern": "^[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])T([01][0-9]|2[0-3]):[0-5][0-9]:([0-5][0-9]|60)([.][0-9]{1,9})?Z$",
+      "maxLength": 30
+    },
+    "date": {
+      "description": "Calendar date, RFC 3339 full-date.",
+      "type": "string",
+      "format": "date",
+      "pattern": "^[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])$",
+      "maxLength": 10
+    },
+    "decimal": {
+      "description": "Exact non-negative decimal as a string (architecture 6.4): rates in USD per million tokens, multipliers, fees, and USD amounts. No sign, exponent, or leading zeros. Never a JSON number.",
+      "type": "string",
+      "pattern": "^(0|[1-9][0-9]{0,17})([.][0-9]{1,18})?$",
+      "maxLength": 37
+    },
+    "probability": {
+      "description": "Exact decimal probability in [0, 1] as a string.",
+      "type": "string",
+      "pattern": "^(0([.][0-9]{1,18})?|1([.]0{1,18})?)$",
+      "maxLength": 20
+    },
+    "delta_seconds": {
+      "description": "Non-negative integer seconds as an HTTP header value (retry-after, RFC 9110 delay-seconds).",
+      "type": "string",
+      "pattern": "^(0|[1-9][0-9]{0,9})$",
+      "maxLength": 10
+    },
+    "https_url": {
+      "description": "Absolute https URL, used only for dated price sources. Not allowed in event schemas.",
+      "type": "string",
+      "format": "uri",
+      "pattern": "^https://[A-Za-z0-9-]+([.][A-Za-z0-9-]+)+(/[A-Za-z0-9._~%/:@!$&'()*+,;=?#-]*)?$",
+      "maxLength": 2048
+    },
+    "nanodollars": {
+      "description": "Money in integer nano-dollars (1 nd = $0.000000001), non-negative, signed 64-bit range (architecture 6.4). JSON consumers must parse it as a 64-bit integer: values above 2^53 lose precision as IEEE doubles.",
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9223372036854775807
+    },
+    "signed_nanodollars": {
+      "description": "Money in integer nano-dollars that can be negative, such as remaining budget after an overrun (architecture 7.6).",
+      "type": "integer",
+      "minimum": -9223372036854775808,
+      "maximum": 9223372036854775807
+    },
+    "token_count": {
+      "description": "Token or use count.",
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9223372036854775807
+    },
+    "duration_ms": {
+      "description": "Duration in whole milliseconds.",
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9223372036854775807
+    },
+    "provider": {
+      "description": "Upstream provider. local is a model reached directly by the sidecar (metered, never billed).",
+      "enum": ["anthropic", "openai", "openrouter", "local"]
+    },
+    "harness": {
+      "description": "Agent harness (architecture 1 G1, 5, 6.6). kiro and pi have trace readers only.",
+      "enum": ["claude-code", "codex", "opencode", "hermes", "openclaw", "workagent", "cursor", "kiro", "pi"]
+    },
+    "route_type": {
+      "description": "Route vocabulary (architecture 8.1).",
+      "enum": ["passthrough", "tier_alias", "stage", "classifier", "escalation", "random_split"]
+    },
+    "evidence_tier": {
+      "description": "Evidence tier for a value (architecture 6.5). unavailable means the source cannot provide the value; it is never the same as a measured zero.",
+      "enum": ["reconciled", "measured", "inferred", "estimated", "unavailable"]
+    },
+    "unavailable_reason": {
+      "description": "Why a value is unavailable. not_reported: the source does not provide it. not_applicable: the dimension does not exist for this provider or path. stream_interrupted: lost when the stream was cut. usage_unavailable: no usage was obtained, so cost cannot be computed. pending_reconciliation: waiting for provider billing data. unpriced: the price book does not cover the attempt (6.3). not_billed: a local model, metered but never billed. unrecognized_format: a trace format the reader does not recognize (6.6). unrecognized_value: a request or response value outside the enumerated set; the raw value is not stored (C2). no_response: the attempt produced no response.",
+      "enum": [
+        "not_reported",
+        "not_applicable",
+        "stream_interrupted",
+        "usage_unavailable",
+        "pending_reconciliation",
+        "unpriced",
+        "not_billed",
+        "unrecognized_format",
+        "unrecognized_value",
+        "no_response"
+      ]
+    },
+    "evidence_rules": {
+      "$comment": "Applied with allOf to every evidenced value: unavailable evidence holds exactly when value is null, and unavailable_reason is present exactly then.",
+      "if": {
+        "properties": { "evidence": { "const": "unavailable" } },
+        "required": ["evidence"]
+      },
+      "then": {
+        "properties": { "value": { "type": "null" } },
+        "required": ["unavailable_reason"]
+      },
+      "else": {
+        "properties": { "value": { "not": { "type": "null" } } },
+        "not": { "required": ["unavailable_reason"] }
+      }
+    },
+    "evidenced_count": {
+      "description": "A token or use count with its evidence tier.",
+      "type": "object",
+      "required": ["value", "evidence"],
+      "properties": {
+        "value": { "oneOf": [{ "$ref": "#/$defs/token_count" }, { "type": "null" }] },
+        "evidence": { "$ref": "#/$defs/evidence_tier" },
+        "unavailable_reason": { "$ref": "#/$defs/unavailable_reason" }
+      },
+      "additionalProperties": false,
+      "allOf": [{ "$ref": "#/$defs/evidence_rules" }]
+    },
+    "evidenced_duration_ms": {
+      "description": "A duration with its evidence tier.",
+      "type": "object",
+      "required": ["value", "evidence"],
+      "properties": {
+        "value": { "oneOf": [{ "$ref": "#/$defs/duration_ms" }, { "type": "null" }] },
+        "evidence": { "$ref": "#/$defs/evidence_tier" },
+        "unavailable_reason": { "$ref": "#/$defs/unavailable_reason" }
+      },
+      "additionalProperties": false,
+      "allOf": [{ "$ref": "#/$defs/evidence_rules" }]
+    },
+    "evidenced_id": {
+      "description": "An identifier with its evidence tier.",
+      "type": "object",
+      "required": ["value", "evidence"],
+      "properties": {
+        "value": { "oneOf": [{ "$ref": "#/$defs/id" }, { "type": "null" }] },
+        "evidence": { "$ref": "#/$defs/evidence_tier" },
+        "unavailable_reason": { "$ref": "#/$defs/unavailable_reason" }
+      },
+      "additionalProperties": false,
+      "allOf": [{ "$ref": "#/$defs/evidence_rules" }]
+    },
+    "evidenced_model_id": {
+      "description": "A model identifier with its evidence tier.",
+      "type": "object",
+      "required": ["value", "evidence"],
+      "properties": {
+        "value": { "oneOf": [{ "$ref": "#/$defs/model_id" }, { "type": "null" }] },
+        "evidence": { "$ref": "#/$defs/evidence_tier" },
+        "unavailable_reason": { "$ref": "#/$defs/unavailable_reason" }
+      },
+      "additionalProperties": false,
+      "allOf": [{ "$ref": "#/$defs/evidence_rules" }]
+    },
+    "evidenced_semver": {
+      "description": "A version with its evidence tier.",
+      "type": "object",
+      "required": ["value", "evidence"],
+      "properties": {
+        "value": { "oneOf": [{ "$ref": "#/$defs/semver" }, { "type": "null" }] },
+        "evidence": { "$ref": "#/$defs/evidence_tier" },
+        "unavailable_reason": { "$ref": "#/$defs/unavailable_reason" }
+      },
+      "additionalProperties": false,
+      "allOf": [{ "$ref": "#/$defs/evidence_rules" }]
+    },
+    "evidenced_timestamp": {
+      "description": "A timestamp with its evidence tier.",
+      "type": "object",
+      "required": ["value", "evidence"],
+      "properties": {
+        "value": { "oneOf": [{ "$ref": "#/$defs/rfc3339_utc" }, { "type": "null" }] },
+        "evidence": { "$ref": "#/$defs/evidence_tier" },
+        "unavailable_reason": { "$ref": "#/$defs/unavailable_reason" }
+      },
+      "additionalProperties": false,
+      "allOf": [{ "$ref": "#/$defs/evidence_rules" }]
+    },
+    "hmac": {
+      "description": "Keyed hash of a provider message or response ID (architecture 6.6, improvement 2): HMAC-SHA256 under a per-org key, so the relay and trace readers compute the same value and the raw ID is never stored.",
+      "type": "object",
+      "required": ["algorithm", "key_id", "digest"],
+      "properties": {
+        "algorithm": { "const": "hmac-sha256" },
+        "key_id": { "$ref": "#/$defs/id" },
+        "digest": { "$ref": "#/$defs/hmac_hex" }
+      },
+      "additionalProperties": false
+    },
+    "evidenced_hmac": {
+      "description": "A keyed hash with its evidence tier; unavailable when the source carries no provider ID.",
+      "type": "object",
+      "required": ["value", "evidence"],
+      "properties": {
+        "value": { "oneOf": [{ "$ref": "#/$defs/hmac" }, { "type": "null" }] },
+        "evidence": { "$ref": "#/$defs/evidence_tier" },
+        "unavailable_reason": { "$ref": "#/$defs/unavailable_reason" }
+      },
+      "additionalProperties": false,
+      "allOf": [{ "$ref": "#/$defs/evidence_rules" }]
+    }
+  }
+}
