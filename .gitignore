@@ -1,0 +1,52 @@
+# Claude Code
+.claude/worktrees/
+.claude/settings.local.json
+.claude/logs/
+
+# Read-only checkouts of reference repositories
+.reference/
+
+# Environment files: never commit; .worktreeinclude copies them into worktrees
+.env*
+!.env.example
+
+# Recordings and captures contain real prompts and code (build plan §2.7).
+# Only manifests are committed.
+recordings/
+*.har
+*.pcap
+*.pcapng
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.hypothesis/
+*.egg-info/
+
+# Node / Next.js
+node_modules/
+.next/
+.turbo/
+
+# Rust / Go
+target/
+/bin/
+
+# Build output and coverage
+dist/
+build/
+coverage/
+.coverage
+htmlcov/
+
+# OS and editors
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp

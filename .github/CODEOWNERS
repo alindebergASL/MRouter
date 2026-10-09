@@ -1,0 +1,13 @@
+# The spec and its guards. GitHub requires an owner review only if branch
+# protection turns that on; here CODEOWNERS is for visibility, and the
+# spec-guard check is the enforcement (build plan §2.2).
+
+/contracts/                        @alindebergASL
+/tests/acceptance/                 @alindebergASL
+/docs/architecture.md              @alindebergASL
+
+# The guards themselves
+/.github/CODEOWNERS                @alindebergASL
+/.github/workflows/spec-guard.yml  @alindebergASL
+/.claude/hooks/                    @alindebergASL
+/.claude/settings.json             @alindebergASL
