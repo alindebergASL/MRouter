@@ -1,0 +1,596 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:purser:contracts:error-envelope:0.1.0",
+  "title": "Router denial response",
+  "description": "A denial the router returns itself, before any upstream byte is sent, in the client's own protocol so harnesses parse it natively (B3, B4, C3, B5). The document is the HTTP response: status, the headers the router sets, and the JSON body. Anthropic Messages bodies use Anthropic's error shape, with the router's code in error.details.error_code, the slot Anthropic's own spend-limit error uses. OpenAI Chat Completions and Responses share one HTTP error shape, with the code in error.code. Each code has a fixed status, error type, and message template with no interpolation, so a body never echoes request content (C2); budget figures go in a closed purser object, and the attempt ID in the purser-attempt-id header. Mid-stream errors are passed through from the provider unmodified (H1) and are not described here.",
+  "type": "object",
+  "required": ["protocol", "denial", "code", "status", "headers", "body"],
+  "properties": {
+    "protocol": {
+      "description": "The client's protocol, which decides the body shape.",
+      "enum": ["anthropic_messages", "openai_chat_completions", "openai_responses"]
+    },
+    "denial": {
+      "description": "budget_exceeded: a strict budget lacks room for the request's ceiling (B1, B4). policy_denied: destination policy forbids the target (C3). request_unbounded: the request's maximum cost cannot be established, so a strict budget cannot admit it (7.2, B3). upstream_unavailable: the upstream, or the budget ledger under a strict budget (B5), cannot be reached.",
+      "enum": ["budget_exceeded", "policy_denied", "request_unbounded", "upstream_unavailable"]
+    },
+    "code": {"$ref": "#/$defs/code"},
+    "status": {
+      "description": "HTTP status. 429 for budget_exceeded (B4), 403 for policy_denied, 400 for request_unbounded, 503 for upstream_unavailable.",
+      "enum": [400, 403, 429, 503]
+    },
+    "headers": {"$ref": "#/$defs/headers"},
+    "body": {"oneOf": [{"$ref": "#/$defs/anthropic_body"}, {"$ref": "#/$defs/openai_body"}]}
+  },
+  "additionalProperties": false,
+  "allOf": [
+    {
+      "$comment": "The body shape follows the protocol.",
+      "if": {"properties": {"protocol": {"const": "anthropic_messages"}}},
+      "then": {"properties": {"body": {"$ref": "#/$defs/anthropic_body"}}},
+      "else": {"properties": {"body": {"$ref": "#/$defs/openai_body"}}}
+    },
+    {
+      "$comment": "Exactly one code's rules apply: its denial, status, headers, error type, message, and detail object.",
+      "oneOf": [
+        {"$ref": "#/$defs/code_purser_budget_exceeded"},
+        {"$ref": "#/$defs/code_purser_policy_denied"},
+        {"$ref": "#/$defs/code_purser_unbounded_unpriced_model"},
+        {"$ref": "#/$defs/code_purser_unbounded_unpriced_dimension"},
+        {"$ref": "#/$defs/code_purser_unbounded_missing_output_cap"},
+        {"$ref": "#/$defs/code_purser_unbounded_uncapped_server_tool"},
+        {"$ref": "#/$defs/code_purser_unbounded_unpriced_cache_ttl"},
+        {"$ref": "#/$defs/code_purser_unbounded_input"},
+        {"$ref": "#/$defs/code_purser_upstream_unavailable"},
+        {"$ref": "#/$defs/code_purser_ledger_unavailable"}
+      ]
+    }
+  ],
+  "$defs": {
+    "code": {
+      "description": "The router's specific error code (B3), in the protocol's native code slot.",
+      "enum": [
+        "purser_budget_exceeded",
+        "purser_policy_denied",
+        "purser_unbounded_unpriced_model",
+        "purser_unbounded_unpriced_dimension",
+        "purser_unbounded_missing_output_cap",
+        "purser_unbounded_uncapped_server_tool",
+        "purser_unbounded_unpriced_cache_ttl",
+        "purser_unbounded_input",
+        "purser_upstream_unavailable",
+        "purser_ledger_unavailable"
+      ]
+    },
+    "message": {
+      "description": "Fixed message templates, one per code. Templates for non-retryable statuses (400, 403) avoid words OpenCode treats as retryable.",
+      "enum": [
+        "Purser budget exceeded for this window. retry-after gives the seconds until the window resets.",
+        "Purser destination policy does not allow this request to reach this provider or model.",
+        "Purser cannot bound the cost of this request: the model has no price-book entry.",
+        "Purser cannot bound the cost of this request: its speed, service tier, or geography has no price-book rule.",
+        "Purser cannot bound the cost of this request: set an output token cap (max_tokens, max_completion_tokens, or max_output_tokens).",
+        "Purser cannot bound the cost of this request: a server tool with a per-use fee needs a max_uses limit.",
+        "Purser cannot bound the cost of this request: a requested cache TTL has no price-book rule.",
+        "Purser cannot bound the cost of this request: no upper bound on its input tokens is available.",
+        "Purser could not reach the upstream provider for this request. Retry later.",
+        "Purser's budget ledger is unavailable, so strict budgets are failing closed. Retry later."
+      ]
+    },
+    "headers": {
+      "description": "Headers the router sets on a denial. retry-after is integer seconds until the denying window resets (B4); required on 429, allowed on 503, absent on 400 and 403.",
+      "type": "object",
+      "required": ["content-type", "purser-attempt-id"],
+      "properties": {
+        "content-type": {"const": "application/json"},
+        "retry-after": {"$ref": "urn:purser:contracts:common:0.1.0#/$defs/delta_seconds"},
+        "purser-attempt-id": {
+          "description": "The ID the agent-facing explain_denial tool takes (7.8).",
+          "$ref": "urn:purser:contracts:common:0.1.0#/$defs/uuid"
+        }
+      },
+      "additionalProperties": false
+    },
+    "budget_detail": {
+      "description": "Which budget denied the request and by how much (7.4, 7.8). remaining_nanodollars is limit minus spent minus reserved, which can be negative after an overrun (7.6).",
+      "type": "object",
+      "required": ["scope", "window", "window_resets_at", "ceiling_nanodollars", "remaining_nanodollars"],
+      "properties": {
+        "scope": {"enum": ["org", "workspace", "team", "user", "device", "session", "virtual_key"]},
+        "window": {"enum": ["day", "month"]},
+        "window_resets_at": {"$ref": "urn:purser:contracts:common:0.1.0#/$defs/rfc3339_utc"},
+        "ceiling_nanodollars": {"$ref": "urn:purser:contracts:common:0.1.0#/$defs/nanodollars"},
+        "remaining_nanodollars": {"$ref": "urn:purser:contracts:common:0.1.0#/$defs/signed_nanodollars"}
+      },
+      "additionalProperties": false
+    },
+    "anthropic_body": {
+      "description": "Anthropic Messages error body: {type: error, error: {type, message, details}}.",
+      "type": "object",
+      "required": ["type", "error"],
+      "properties": {
+        "type": {"const": "error"},
+        "error": {
+          "type": "object",
+          "required": ["type", "message", "details"],
+          "properties": {
+            "type": {"enum": ["rate_limit_error", "permission_error", "invalid_request_error", "api_error"]},
+            "message": {"$ref": "#/$defs/message"},
+            "details": {
+              "type": "object",
+              "required": ["error_code"],
+              "properties": {
+                "error_code": {"$ref": "#/$defs/code"},
+                "purser": {"$ref": "#/$defs/budget_detail"}
+              },
+              "additionalProperties": false
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "openai_body": {
+      "description": "OpenAI error body, shared by Chat Completions and Responses: {error: {message, type, param, code}}, all four keys present. type insufficient_quota on budget denials is what makes Codex stop retrying.",
+      "type": "object",
+      "required": ["error"],
+      "properties": {
+        "error": {
+          "type": "object",
+          "required": ["message", "type", "param", "code"],
+          "properties": {
+            "message": {"$ref": "#/$defs/message"},
+            "type": {
+              "enum": ["insufficient_quota", "permission_error", "invalid_request_error", "server_error"]
+            },
+            "param": {"type": "null"},
+            "code": {"$ref": "#/$defs/code"}
+          },
+          "additionalProperties": false
+        },
+        "purser": {"$ref": "#/$defs/budget_detail"}
+      },
+      "additionalProperties": false
+    },
+    "code_purser_budget_exceeded": {
+      "properties": {
+        "denial": {"const": "budget_exceeded"},
+        "code": {"const": "purser_budget_exceeded"},
+        "status": {"const": 429},
+        "headers": {"required": ["retry-after"]},
+        "body": {
+          "oneOf": [
+            {
+              "required": ["type"],
+              "properties": {
+                "error": {
+                  "properties": {
+                    "type": {"const": "rate_limit_error"},
+                    "message": {
+                      "const": "Purser budget exceeded for this window. retry-after gives the seconds until the window resets."
+                    },
+                    "details": {
+                      "properties": {"error_code": {"const": "purser_budget_exceeded"}},
+                      "required": ["purser"]
+                    }
+                  }
+                }
+              }
+            },
+            {
+              "not": {"required": ["type"]},
+              "properties": {
+                "error": {
+                  "properties": {
+                    "type": {"const": "insufficient_quota"},
+                    "message": {
+                      "const": "Purser budget exceeded for this window. retry-after gives the seconds until the window resets."
+                    },
+                    "code": {"const": "purser_budget_exceeded"}
+                  }
+                }
+              },
+              "required": ["purser"]
+            }
+          ]
+        }
+      },
+      "required": ["code"]
+    },
+    "code_purser_policy_denied": {
+      "properties": {
+        "denial": {"const": "policy_denied"},
+        "code": {"const": "purser_policy_denied"},
+        "status": {"const": 403},
+        "headers": {"not": {"required": ["retry-after"]}},
+        "body": {
+          "oneOf": [
+            {
+              "required": ["type"],
+              "properties": {
+                "error": {
+                  "properties": {
+                    "type": {"const": "permission_error"},
+                    "message": {
+                      "const": "Purser destination policy does not allow this request to reach this provider or model."
+                    },
+                    "details": {
+                      "properties": {"error_code": {"const": "purser_policy_denied"}},
+                      "not": {"required": ["purser"]}
+                    }
+                  }
+                }
+              }
+            },
+            {
+              "not": {"required": ["purser"]},
+              "properties": {
+                "error": {
+                  "properties": {
+                    "type": {"const": "permission_error"},
+                    "message": {
+                      "const": "Purser destination policy does not allow this request to reach this provider or model."
+                    },
+                    "code": {"const": "purser_policy_denied"}
+                  }
+                }
+              }
+            }
+          ]
+        }
+      },
+      "required": ["code"]
+    },
+    "code_purser_unbounded_unpriced_model": {
+      "properties": {
+        "denial": {"const": "request_unbounded"},
+        "code": {"const": "purser_unbounded_unpriced_model"},
+        "status": {"const": 400},
+        "headers": {"not": {"required": ["retry-after"]}},
+        "body": {
+          "oneOf": [
+            {
+              "required": ["type"],
+              "properties": {
+                "error": {
+                  "properties": {
+                    "type": {"const": "invalid_request_error"},
+                    "message": {
+                      "const": "Purser cannot bound the cost of this request: the model has no price-book entry."
+                    },
+                    "details": {
+                      "properties": {"error_code": {"const": "purser_unbounded_unpriced_model"}},
+                      "not": {"required": ["purser"]}
+                    }
+                  }
+                }
+              }
+            },
+            {
+              "not": {"required": ["purser"]},
+              "properties": {
+                "error": {
+                  "properties": {
+                    "type": {"const": "invalid_request_error"},
+                    "message": {
+                      "const": "Purser cannot bound the cost of this request: the model has no price-book entry."
+                    },
+                    "code": {"const": "purser_unbounded_unpriced_model"}
+                  }
+                }
+              }
+            }
+          ]
+        }
+      },
+      "required": ["code"]
+    },
+    "code_purser_unbounded_unpriced_dimension": {
+      "properties": {
+        "denial": {"const": "request_unbounded"},
+        "code": {"const": "purser_unbounded_unpriced_dimension"},
+        "status": {"const": 400},
+        "headers": {"not": {"required": ["retry-after"]}},
+        "body": {
+          "oneOf": [
+            {
+              "required": ["type"],
+              "properties": {
+                "error": {
+                  "properties": {
+                    "type": {"const": "invalid_request_error"},
+                    "message": {
+                      "const": "Purser cannot bound the cost of this request: its speed, service tier, or geography has no price-book rule."
+                    },
+                    "details": {
+                      "properties": {"error_code": {"const": "purser_unbounded_unpriced_dimension"}},
+                      "not": {"required": ["purser"]}
+                    }
+                  }
+                }
+              }
+            },
+            {
+              "not": {"required": ["purser"]},
+              "properties": {
+                "error": {
+                  "properties": {
+                    "type": {"const": "invalid_request_error"},
+                    "message": {
+                      "const": "Purser cannot bound the cost of this request: its speed, service tier, or geography has no price-book rule."
+                    },
+                    "code": {"const": "purser_unbounded_unpriced_dimension"}
+                  }
+                }
+              }
+            }
+          ]
+        }
+      },
+      "required": ["code"]
+    },
+    "code_purser_unbounded_missing_output_cap": {
+      "properties": {
+        "denial": {"const": "request_unbounded"},
+        "code": {"const": "purser_unbounded_missing_output_cap"},
+        "status": {"const": 400},
+        "headers": {"not": {"required": ["retry-after"]}},
+        "body": {
+          "oneOf": [
+            {
+              "required": ["type"],
+              "properties": {
+                "error": {
+                  "properties": {
+                    "type": {"const": "invalid_request_error"},
+                    "message": {
+                      "const": "Purser cannot bound the cost of this request: set an output token cap (max_tokens, max_completion_tokens, or max_output_tokens)."
+                    },
+                    "details": {
+                      "properties": {"error_code": {"const": "purser_unbounded_missing_output_cap"}},
+                      "not": {"required": ["purser"]}
+                    }
+                  }
+                }
+              }
+            },
+            {
+              "not": {"required": ["purser"]},
+              "properties": {
+                "error": {
+                  "properties": {
+                    "type": {"const": "invalid_request_error"},
+                    "message": {
+                      "const": "Purser cannot bound the cost of this request: set an output token cap (max_tokens, max_completion_tokens, or max_output_tokens)."
+                    },
+                    "code": {"const": "purser_unbounded_missing_output_cap"}
+                  }
+                }
+              }
+            }
+          ]
+        }
+      },
+      "required": ["code"]
+    },
+    "code_purser_unbounded_uncapped_server_tool": {
+      "properties": {
+        "denial": {"const": "request_unbounded"},
+        "code": {"const": "purser_unbounded_uncapped_server_tool"},
+        "status": {"const": 400},
+        "headers": {"not": {"required": ["retry-after"]}},
+        "body": {
+          "oneOf": [
+            {
+              "required": ["type"],
+              "properties": {
+                "error": {
+                  "properties": {
+                    "type": {"const": "invalid_request_error"},
+                    "message": {
+                      "const": "Purser cannot bound the cost of this request: a server tool with a per-use fee needs a max_uses limit."
+                    },
+                    "details": {
+                      "properties": {"error_code": {"const": "purser_unbounded_uncapped_server_tool"}},
+                      "not": {"required": ["purser"]}
+                    }
+                  }
+                }
+              }
+            },
+            {
+              "not": {"required": ["purser"]},
+              "properties": {
+                "error": {
+                  "properties": {
+                    "type": {"const": "invalid_request_error"},
+                    "message": {
+                      "const": "Purser cannot bound the cost of this request: a server tool with a per-use fee needs a max_uses limit."
+                    },
+                    "code": {"const": "purser_unbounded_uncapped_server_tool"}
+                  }
+                }
+              }
+            }
+          ]
+        }
+      },
+      "required": ["code"]
+    },
+    "code_purser_unbounded_unpriced_cache_ttl": {
+      "properties": {
+        "denial": {"const": "request_unbounded"},
+        "code": {"const": "purser_unbounded_unpriced_cache_ttl"},
+        "status": {"const": 400},
+        "headers": {"not": {"required": ["retry-after"]}},
+        "body": {
+          "oneOf": [
+            {
+              "required": ["type"],
+              "properties": {
+                "error": {
+                  "properties": {
+                    "type": {"const": "invalid_request_error"},
+                    "message": {
+                      "const": "Purser cannot bound the cost of this request: a requested cache TTL has no price-book rule."
+                    },
+                    "details": {
+                      "properties": {"error_code": {"const": "purser_unbounded_unpriced_cache_ttl"}},
+                      "not": {"required": ["purser"]}
+                    }
+                  }
+                }
+              }
+            },
+            {
+              "not": {"required": ["purser"]},
+              "properties": {
+                "error": {
+                  "properties": {
+                    "type": {"const": "invalid_request_error"},
+                    "message": {
+                      "const": "Purser cannot bound the cost of this request: a requested cache TTL has no price-book rule."
+                    },
+                    "code": {"const": "purser_unbounded_unpriced_cache_ttl"}
+                  }
+                }
+              }
+            }
+          ]
+        }
+      },
+      "required": ["code"]
+    },
+    "code_purser_unbounded_input": {
+      "properties": {
+        "denial": {"const": "request_unbounded"},
+        "code": {"const": "purser_unbounded_input"},
+        "status": {"const": 400},
+        "headers": {"not": {"required": ["retry-after"]}},
+        "body": {
+          "oneOf": [
+            {
+              "required": ["type"],
+              "properties": {
+                "error": {
+                  "properties": {
+                    "type": {"const": "invalid_request_error"},
+                    "message": {
+                      "const": "Purser cannot bound the cost of this request: no upper bound on its input tokens is available."
+                    },
+                    "details": {
+                      "properties": {"error_code": {"const": "purser_unbounded_input"}},
+                      "not": {"required": ["purser"]}
+                    }
+                  }
+                }
+              }
+            },
+            {
+              "not": {"required": ["purser"]},
+              "properties": {
+                "error": {
+                  "properties": {
+                    "type": {"const": "invalid_request_error"},
+                    "message": {
+                      "const": "Purser cannot bound the cost of this request: no upper bound on its input tokens is available."
+                    },
+                    "code": {"const": "purser_unbounded_input"}
+                  }
+                }
+              }
+            }
+          ]
+        }
+      },
+      "required": ["code"]
+    },
+    "code_purser_upstream_unavailable": {
+      "properties": {
+        "denial": {"const": "upstream_unavailable"},
+        "code": {"const": "purser_upstream_unavailable"},
+        "status": {"const": 503},
+        "body": {
+          "oneOf": [
+            {
+              "required": ["type"],
+              "properties": {
+                "error": {
+                  "properties": {
+                    "type": {"const": "api_error"},
+                    "message": {
+                      "const": "Purser could not reach the upstream provider for this request. Retry later."
+                    },
+                    "details": {
+                      "properties": {"error_code": {"const": "purser_upstream_unavailable"}},
+                      "not": {"required": ["purser"]}
+                    }
+                  }
+                }
+              }
+            },
+            {
+              "not": {"required": ["purser"]},
+              "properties": {
+                "error": {
+                  "properties": {
+                    "type": {"const": "server_error"},
+                    "message": {
+                      "const": "Purser could not reach the upstream provider for this request. Retry later."
+                    },
+                    "code": {"const": "purser_upstream_unavailable"}
+                  }
+                }
+              }
+            }
+          ]
+        }
+      },
+      "required": ["code"]
+    },
+    "code_purser_ledger_unavailable": {
+      "properties": {
+        "denial": {"const": "upstream_unavailable"},
+        "code": {"const": "purser_ledger_unavailable"},
+        "status": {"const": 503},
+        "body": {
+          "oneOf": [
+            {
+              "required": ["type"],
+              "properties": {
+                "error": {
+                  "properties": {
+                    "type": {"const": "api_error"},
+                    "message": {
+                      "const": "Purser's budget ledger is unavailable, so strict budgets are failing closed. Retry later."
+                    },
+                    "details": {
+                      "properties": {"error_code": {"const": "purser_ledger_unavailable"}},
+                      "not": {"required": ["purser"]}
+                    }
+                  }
+                }
+              }
+            },
+            {
+              "not": {"required": ["purser"]},
+              "properties": {
+                "error": {
+                  "properties": {
+                    "type": {"const": "server_error"},
+                    "message": {
+                      "const": "Purser's budget ledger is unavailable, so strict budgets are failing closed. Retry later."
+                    },
+                    "code": {"const": "purser_ledger_unavailable"}
+                  }
+                }
+              }
+            }
+          ]
+        }
+      },
+      "required": ["code"]
+    }
+  }
+}
