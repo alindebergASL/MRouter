@@ -15,10 +15,13 @@ Scope: Auth service, the install bootstrap command, orgs and RBAC with row-level
 1. Task 2, FastAPI skeleton (orgs, workspaces, users, roles; OpenAPI export; generated
    TypeScript client; A1 drift check; Dockerfile in the Compose stack). Validate tokens against
    the configured OIDC issuer (Keycloak's realm) through discovery and JWKS with a stock library;
-   map `sub` and the organization claim to our rows. Every org-scoped table gets a forced
-   row-level security policy keyed on the request's org from the first migration (spec 4, A5). Includes the Keycloak admin-event reconciler (one-minute
-   poll, re-read user state on USER UPDATE/DELETE, alert when behind by 5 minutes) and the per-org
-   SCIM 2.0 endpoint scoped and estimated in the ADR (12 engineer-days; re-score trigger at 18).
+   map `sub` to our user row, and take the request's org from the request, checked against
+   membership in our database, never from the token's organization claim alone. Every
+   org-scoped table gets a forced row-level security policy for reads and writes, keyed on the
+   request's org, from the first migration; credential lookups before the org is set go through
+   narrow `SECURITY DEFINER` functions (spec 4, A5). Includes the Keycloak admin-event
+   reconciler (one-minute poll, re-read user state on USER UPDATE/DELETE, alert when behind by
+   5 minutes) and the per-org SCIM 2.0 endpoint scoped and estimated in the ADR (12 engineer-days; re-score trigger at 18).
 2. Add Keycloak to `deploy/compose/dev.yaml` from `quay.io/keycloak/keycloak`, pinned by digest and
    pre-pulled by `scripts/cloud-setup.sh` (so `make check-pins` passes), with its own database in
    the dev Postgres.
