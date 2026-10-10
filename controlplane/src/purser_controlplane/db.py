@@ -1,15 +1,17 @@
 """Database engines and the per-transaction row-level-security context.
 
-The API connects as a role without BYPASSRLS. Every transaction starts by
-setting the caller's context with set_config(name, value, true), which is
-SET LOCAL with bind parameters: it lasts until the transaction ends and can't
-leak to the next request on a pooled connection. The context lives in
-session.info and is re-applied at the start of every transaction, so a commit
-in the middle of a request doesn't drop it.
+The API connects as roles without BYPASSRLS: the request path's role for
+member routes, and a separate operator role for operator routes. Every
+transaction starts by setting the caller's context with set_config(name,
+value, true), which is SET LOCAL with bind parameters: it lasts until the
+transaction ends and can't leak to the next request on a pooled connection.
+The context lives in session.info and is re-applied at the start of every
+transaction, so a commit in the middle of a request doesn't drop it.
 
     purser.org_id        the org whose rows this transaction may see (A5)
-    purser.operator_sub  an operator's subject; grants the operator policies
-                         only if it names a row in platform_operators
+    purser.operator_sub  an operator's subject; grants the operator role's
+                         policies only if it names a row in platform_operators.
+                         No policy for the request path's role reads it.
 """
 
 import uuid

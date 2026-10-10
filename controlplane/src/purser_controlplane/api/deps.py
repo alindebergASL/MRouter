@@ -88,7 +88,19 @@ def get_principal(
 
 
 def get_session(request: Request) -> Iterator[Session]:
+    """A session on the request path's role: one org per transaction (A5)."""
     database: Database = request.app.state.db
+    with database.session() as session:
+        yield session
+
+
+def get_operator_session(request: Request) -> Iterator[Session]:
+    """A session on the operator role, the only cross-org role the API holds.
+
+    Only require_operator() uses it. The request path's role has no policy
+    that reaches another org, whatever its transaction sets (spec 4).
+    """
+    database: Database = request.app.state.operator_db
     with database.session() as session:
         yield session
 
@@ -104,6 +116,7 @@ def get_keycloak(request: Request) -> KeycloakAdmin:
 
 PrincipalDep = Annotated[Principal, Depends(get_principal)]
 SessionDep = Annotated[Session, Depends(get_session)]
+OperatorSessionDep = Annotated[Session, Depends(get_operator_session)]
 KeycloakDep = Annotated[KeycloakAdmin, Depends(get_keycloak)]
 
 
@@ -184,11 +197,11 @@ def require_operator() -> Callable[..., OperatorContext]:
 
     def dependency(
         principal: PrincipalDep,
-        session: SessionDep,
+        session: OperatorSessionDep,
         settings: Annotated[Settings, Depends(get_settings)],
     ) -> OperatorContext:
-        # A SECURITY DEFINER function: the API role can test this subject but
-        # can't read the operator list.
+        # A SECURITY DEFINER function: the operator role can test this subject
+        # but can't read the operator list.
         is_operator = bool(session.scalar(select(func.controlplane.is_operator(principal.sub))))
         if not is_operator or principal.acr != settings.oidc_mfa_acr:
             log.info(

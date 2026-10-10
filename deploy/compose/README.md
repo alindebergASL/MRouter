@@ -29,7 +29,7 @@ SessionStart hook starts it), and in GitHub Actions (`.github/workflows/ci.yml`)
 | `postgres` | `postgres:18.6-trixie` from public ECR, pinned by digest (ADR 0002) | `127.0.0.1:55432` | user `purser_dev`, password `purser-dev-only-not-a-secret`, database `purser_dev` |
 | `keycloak-db-init` | same Postgres image; one-shot | none | creates role `keycloak_dev` (password `keycloak-db-dev-only-not-a-secret`) and database `keycloak`; revokes PUBLIC's CONNECT on both databases, so each admits only its own roles |
 | `keycloak` | `quay.io/keycloak/keycloak:26.8.0`, pinned by digest (ADR 0003) | `127.0.0.1:58080` | bootstrap admin `admin` / `keycloak-admin-dev-only-not-a-secret` (master realm) |
-| `controlplane-db-init` | same Postgres image; one-shot | none | roles `purser_cp_owner`, `purser_cp_app`, `purser_cp_sweeper` (passwords `cp-<role>-dev-only-not-a-secret`) and schema `controlplane` in `purser_dev` |
+| `controlplane-db-init` | same Postgres image; one-shot | none | login roles `purser_cp_owner`, `purser_cp_app`, `purser_cp_operator`, `purser_cp_sweeper` (passwords `cp-<role>-dev-only-not-a-secret`), the non-login `purser_cp_definer`, and schema `controlplane` in `purser_dev` |
 | `controlplane-migrate` | the control-plane image; one-shot, profile `app` | none | migrates as the owner role, then applies the dev seed |
 | `controlplane` | the control-plane image, profile `app` | `127.0.0.1:58180` | runs non-root, read-only, no capabilities; dev Keycloak client secret `controlplane-dev-only-not-a-secret` |
 | `controlplane-sweeper` | the control-plane image, profile `app` | none | finishes or rolls back pending rows |
