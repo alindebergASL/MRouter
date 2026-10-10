@@ -1,0 +1,18 @@
+{
+  "name": "purser-console",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Purser admin console. For now, only the TypeScript client generated from the admin API's OpenAPI document (A1).",
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "gen:client": "openapi-ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@hey-api/openapi-ts": "0.99.0",
+    "typescript": "6.0.3"
+  }
+}

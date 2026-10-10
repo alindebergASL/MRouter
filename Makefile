@@ -10,7 +10,8 @@ SHELL_SCRIPTS := $(wildcard scripts/*.sh .claude/hooks/*.sh controlplane/scripts
 .PHONY: help dev-up dev-down dev-reset dev-ps dev-logs dev-psql dev-check dev-token \
         check-pins check-hooks lint test images \
         cp-sync cp-lock cp-lint cp-fmt cp-test-unit cp-test cp-migrate \
-        cp-image cp-image-check dev-up-app
+        cp-image cp-image-check dev-up-app \
+        cp-openapi cp-openapi-check console-client console-client-check
 
 help: ## List targets
 	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  %-12s %s\n", $$1, $$2}'
@@ -68,6 +69,26 @@ cp-test: ## Control plane: every test, against the dev stack (make dev-up first)
 
 cp-migrate: ## Control plane: migrate the dev database to head (as the owner role)
 	$(CP_TOOLS) migrate
+
+cp-openapi: ## A1: export the admin API's OpenAPI 3.1 document to controlplane/openapi/
+	$(CP_SOLO) openapi
+	$(COMPOSE) run --rm -T --no-deps --entrypoint chown cp-tools-solo $(HOST_IDS) openapi/admin-api.json
+
+cp-openapi-check: ## A1: fail if FastAPI's output differs from the committed document
+	$(CP_SOLO) openapi-check
+
+CONSOLE_TOOLS := $(COMPOSE) run --rm -T --no-deps console-tools
+
+console-client: ## A1: regenerate the console's TypeScript client from the committed document
+	$(CONSOLE_TOOLS) gen
+	$(COMPOSE) run --rm -T --no-deps --entrypoint chown console-tools -R $(HOST_IDS) src/client
+
+console-client-check: console-client ## A1: fail if the committed client differs from a fresh generation
+	@if ! git diff --exit-code -- console/src/client || [ -n "$$(git status --porcelain -- console/src/client)" ]; then \
+	  echo "console/src/client differs from a fresh generation: run make console-client and commit" >&2; \
+	  exit 1; \
+	fi
+	$(CONSOLE_TOOLS) typecheck
 
 CP_IMAGE ?= purser-controlplane:dev
 # A variable, because the comma would split $(if ...)'s arguments.

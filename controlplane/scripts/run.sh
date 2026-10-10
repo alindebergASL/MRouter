@@ -34,10 +34,21 @@ case "${1:-}" in
   test-unit) sync; shift; run pytest -m "not stack" "$@" ;;
   test) sync; shift; run pytest "$@" ;;
   migrate) sync; run python -m purser_controlplane migrate ;;
+  openapi) sync; run python -m purser_controlplane export-openapi --output openapi/admin-api.json ;;
+  openapi-check)
+    sync
+    fresh=$(mktemp)
+    run python -m purser_controlplane export-openapi --output "$fresh"
+    if ! diff -u openapi/admin-api.json "$fresh"; then
+      echo "controlplane/openapi/admin-api.json differs from FastAPI's output: run make cp-openapi" >&2
+      exit 1
+    fi
+    echo "ok: controlplane/openapi/admin-api.json matches FastAPI's output"
+    ;;
   alembic) sync; shift; run alembic "$@" ;;
   python) sync; shift; run python "$@" ;;
   *)
-    echo "usage: $0 sync|lock|lint|fmt [files]|test-unit|test|migrate|alembic ...|python ..." >&2
+    echo "usage: $0 sync|lock|lint|fmt [files]|test-unit|test|migrate|openapi|openapi-check|alembic ...|python ..." >&2
     exit 2
     ;;
 esac

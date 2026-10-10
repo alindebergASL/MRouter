@@ -149,6 +149,17 @@ def cmd_sweep(args: argparse.Namespace) -> None:
     )
 
 
+def cmd_export_openapi(args: argparse.Namespace) -> None:
+    """Write the admin API's OpenAPI 3.1 document (A1). Needs no settings or services."""
+    from purser_controlplane.openapi import render
+
+    document = render()
+    if args.output == "-":
+        sys.stdout.write(document)
+    else:
+        Path(args.output).write_text(document, encoding="utf-8")
+
+
 def main(argv: list[str] | None = None) -> None:
     logs.configure()
     parser = argparse.ArgumentParser(prog="purser_controlplane")
@@ -168,6 +179,9 @@ def main(argv: list[str] | None = None) -> None:
     sub.add_parser(
         "dev-seed", help="seed the dev realm's org and users (PURSER_ENV=dev only)"
     ).set_defaults(func=cmd_dev_seed)
+    export = sub.add_parser("export-openapi", help="write the OpenAPI 3.1 document (A1)")
+    export.add_argument("--output", default="-", help="file to write (default: stdout)")
+    export.set_defaults(func=cmd_export_openapi)
     sweep = sub.add_parser("sweep", help="finish or roll back pending rows")
     sweep.add_argument("--once", action="store_true")
     sweep.set_defaults(func=cmd_sweep)

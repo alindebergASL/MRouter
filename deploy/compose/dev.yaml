@@ -239,7 +239,22 @@ services:
       keycloak:
         condition: service_healthy
 
+  console-tools:
+    # The console's toolchain (Node 22, pinned): generates the TypeScript client
+    # from controlplane/openapi/admin-api.json (A1). Run by `make console-*`.
+    image: public.ecr.aws/docker/library/node:22.22.0-trixie-slim@sha256:465a8c8f0f4103861bcbcf3e512608394b7155eccb1955425f4ea3f672ddc53e
+    profiles: ["tools"]
+    working_dir: /src/console
+    entrypoint: ["/src/console/scripts/run.sh"]
+    volumes:
+      - ../..:/src
+      # node_modules stays in a volume, out of the working tree.
+      - console-node-modules:/src/console/node_modules
+    environment:
+      npm_config_update_notifier: "false"
+
 volumes:
   pgdata:
   cp-venv:
   cp-cache:
+  console-node-modules:
