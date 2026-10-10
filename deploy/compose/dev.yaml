@@ -31,6 +31,7 @@ x-cp-tools: &cp-tools
     PURSER_ENV: dev
     PURSER_DB_URL: postgresql+psycopg://purser_cp_app:cp-app-dev-only-not-a-secret@postgres:5432/purser_dev
     PURSER_DB_SWEEPER_URL: postgresql+psycopg://purser_cp_sweeper:cp-sweeper-dev-only-not-a-secret@postgres:5432/purser_dev
+    PURSER_DB_OPERATOR_URL: postgresql+psycopg://purser_cp_operator:cp-operator-dev-only-not-a-secret@postgres:5432/purser_dev
     PURSER_DB_OWNER_URL: postgresql+psycopg://purser_cp_owner:cp-owner-dev-only-not-a-secret@postgres:5432/purser_dev
     PURSER_TEST_DB_ADMIN_URL: postgresql+psycopg://purser_dev:purser-dev-only-not-a-secret@postgres:5432/purser_dev
     PURSER_OIDC_ISSUER: http://localhost:58080/realms/purser-dev
@@ -57,7 +58,8 @@ x-controlplane: &controlplane
     # Development-only credentials. Not secrets; never reuse them anywhere else.
     # Production injects these from AWS Secrets Manager (ADR 0003).
     # Each service adds the one database URL its role needs (below): the API
-    # never holds the owner's or the sweeper's credentials.
+    # never holds the owner's or the sweeper's credentials, and only the API
+    # holds the operator role's.
     PURSER_ENV: dev
     PURSER_OIDC_ISSUER: http://localhost:58080/realms/purser-dev
     # Backchannel: the issuer's public URL isn't reachable from this container.
@@ -185,8 +187,9 @@ services:
         condition: service_completed_successfully
 
   cp-tools-solo:
-    # The same toolchain on its own network, for work that needs no stack
-    # (locking, lint, unit tests, the Stop hook).
+    # The same toolchain without Keycloak's network namespace, for work that
+    # needs no stack running (locking, lint, unit tests, the Stop hook). It is
+    # still on the Compose network and inherits the dev database URLs above.
     <<: *cp-tools
     profiles: ["tools"]
 
@@ -204,11 +207,13 @@ services:
     restart: "no"
 
   controlplane:
-    # The admin API on 127.0.0.1:58180, as the app role (no BYPASSRLS).
+    # The admin API on 127.0.0.1:58180: member routes as the app role, operator
+    # routes as the operator role (neither has BYPASSRLS).
     <<: *controlplane
     environment:
       <<: *controlplane-env
       PURSER_DB_URL: postgresql+psycopg://purser_cp_app:cp-app-dev-only-not-a-secret@postgres:5432/purser_dev
+      PURSER_DB_OPERATOR_URL: postgresql+psycopg://purser_cp_operator:cp-operator-dev-only-not-a-secret@postgres:5432/purser_dev
     ports:
       - "127.0.0.1:58180:8080"
     depends_on:
