@@ -1,5 +1,11 @@
 # 0003. Auth service for people identity
 
+> **Amended by architecture draft 0.6.** The body below is the historical record; two points
+> have changed. Keycloak's bootstrap admin is temporary and is deleted when the install
+> bootstrap finishes (architecture §9.1), so it is no longer a credential kept in Secrets
+> Manager. "Customer-hosted" now means either the self-hosted org install or the
+> customer-hosted relay (architecture §12).
+
 - Status: Accepted
 - Date: 2026-10-09 (proposed and accepted)
 - Deciders: Andrew Lindeberg

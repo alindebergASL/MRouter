@@ -1,6 +1,8 @@
 # Purser: v1 Build Plan
 
-Draft 0.2, 2026-10-07. Owner: Andrew Lindeberg. Spec: `docs/architecture.md` in the repository (draft 0.5). Guarantee IDs (C1, B1, H1, D1, …) refer to that document.
+Draft 0.3, 2026-10-09. Owner: Andrew Lindeberg. Spec: `docs/architecture.md` in the repository (draft 0.6). Guarantee IDs (C1, B1, H1, D1, …) refer to that document.
+
+Changes in 0.3: the deployment decision recorded (10): v1 is our hosted multi-tenant service, and the other models are deferred with entry criteria in spec section 12. The install bootstrap command (spec 9.1, D4) and Postgres row-level security for org isolation (spec 4, A5) are added to Lane D (5, 7) and to gate G2 (6). Lane B's ledger functions take the org as an explicit argument and fail closed when the org has no budget policy (spec 7.6, B5). The v1 schedule doesn't change. The auth service decision is recorded as made (ADR 0003), and Appendix A matches the root `CLAUDE.md` invariants.
 
 Changes in 0.2: containers in the build (2.8), the `deploy/` layout (3), container work assigned to lanes and gates (5 to 7), and two new open decisions (10).
 
@@ -117,8 +119,8 @@ At most four lanes run at once.
 |---|---|---|
 | **A. Spec and proof** | `contracts/`, acceptance tests, the certification lab (recorder, replayer, mock providers), the Compose dev stack, CI including image builds, scanning, SBOMs, and signing; later the security test infrastructure | H1, H2 (test side), C1–C4 test harnesses, D1, D2 |
 | **B. Money** | Ledger SQL, attempt state machine, price-book schema and Python oracle, accounting-adapter fixtures; after the bake-off, the pricing and adapter code in the data plane | B1–B6, P1, M1–M5 |
-| **C. Data plane** | The bake-off; then relay (federated credentials, destination policy, dispatch, settlement, public listener) and sidecar (enrollment, `connect` and `run`, loopback endpoint, local models, budget MCP); the sidecar's Compose file and Helm chart | C1–C3, A2, A3, A4 (implementation side), H1 per row, D3 |
-| **D. Control plane and console** | Auth-service integration (MFA, SSO, SCIM), orgs and RBAC, devices and the CA, virtual keys, model catalog, budgets, usage views with evidence tiers and coverage, audit; from Phase 2, the us-east-1 deployment (RDS, ECS or EKS, KMS, Secrets Manager) | A1, A4 (API side) |
+| **C. Data plane** | The bake-off; then relay (federated credentials, destination policy, dispatch, settlement, public listener) and sidecar (enrollment, `connect` and `run`, loopback endpoint, local models, budget MCP); the sidecar's Compose file and Helm chart | C1–C3, A2, A3, A4 (implementation side), A5 (relay side), H1 per row, D3 |
+| **D. Control plane and console** | Auth-service integration (Keycloak per ADR 0003: MFA, SSO, SCIM), the install bootstrap command (spec 9.1), orgs and RBAC with row-level security (spec 4), devices and the CA, virtual keys, model catalog, budgets, usage views with evidence tiers and coverage, audit; from Phase 2, the us-east-1 deployment (RDS, ECS or EKS, KMS, Secrets Manager) | A1, A4 (API side), A5, D4 |
 | **E. Coverage** (from Phase 4) | Trace readers, keyed-hash dedup, evidence tiers, reconciliation job, Token Meter oracle | C4, M3, M4 |
 | **F. Routing lab** (from Phase 4) | Shadow router, decision records, replay, drift alarms, episodes and feedback API, harness-hook recommendations | R1, R2 |
 
@@ -130,12 +132,12 @@ Lanes E and F start only when A and D have capacity to spare.
 |---|---|---|---|
 | **0. Foundations** | 1 week | A, D | **G0:** repo, CI, `CLAUDE.md`, hooks, and subagents in place; the Compose dev stack (Postgres at first) starts in CI, in a cloud session, and on Andrew's Mac; contracts v0 merged; recordings for Claude Code and Codex covering streaming, tool calls, an interrupted stream, and compaction; auth service chosen (ADR) |
 | **1. Parallel foundations** | 2 weeks | A, B, C (bake-off), D | **G1:** foundation chosen (ADR, by spec 10.2 criteria, container footprint included); ledger property tests pass (B1, B2, B5 against SQL in the stack's Postgres container, with crashes injected); price fixtures complete for Anthropic and OpenAI (M2, M5 against the oracle); control-plane skeleton with OpenAPI and generated client |
-| **2. First vertical slice** | 3 weeks | A, B, C, D | **G2:** Claude Code → sidecar → relay → Anthropic through workload identity federation, under a strict budget, metered, visible in the console, with protocol-correct denials. The relay, API, and console run as containers in us-east-1 against Amazon RDS. Passing: H1 (Claude Code row), C1–C3, B1–B5, P1, M1, M2, A1, A2, D1, D2. Dogfooding starts. |
+| **2. First vertical slice** | 3 weeks | A, B, C, D | **G2:** Claude Code → sidecar → relay → Anthropic through workload identity federation, under a strict budget, metered, visible in the console, with protocol-correct denials. The relay, API, and console run as containers in us-east-1 against Amazon RDS. The us-east-1 install is created by the bootstrap command. Passing: H1 (Claude Code row), C1–C3, B1–B5, P1, M1, M2, A1, A2, A5, D1, D2, D4. Dogfooding starts. |
 | **3. Breadth** | 3 weeks | A, B, C, D | **G3:** Codex, OpenCode, Hermes, OpenClaw, and WorkAgent rows; OpenAI and OpenRouter adapters and federation; budget MCP; the sidecar as a container through Compose and the Helm chart (tested on kind). Passing: H1 (all those rows), M5, B6, A4, W1, D3. Ready for a design-partner pilot. |
 | **4. Coverage and routing lab** | 3 weeks | A or E, C, D, F | **G4 (release candidate):** Cursor row through the public listener; trace readers; shadow routing; reconciliation; signed installers and images. Passing: H2, A3, C4, M3, M4, R1, R2. |
 | **5. Pilot and experiment** | Ongoing | As needed | First month's reconciliation; the spec 8.4 routing experiment; decision on enforce-mode routing |
 
-Sum of targets through G4: 12 weeks.
+Sum of targets through G4: 12 weeks. The v1 schedule doesn't change with spec draft 0.6: the bootstrap command and row-level security are Lane D work inside Phases 1 and 2. That is re-checked at G1, with the D4 and A5 tests counted in the measured throughput.
 
 ## 7. First tasks per lane (Phases 0 and 1)
 
@@ -146,8 +148,8 @@ Sum of targets through G4: 12 weeks.
 4. Replayer and mock providers, each as a container in the stack. The mock logs every attempt it receives (needed by M1 and B2) and can bill random usage within a request's bounds (needed by B1).
 
 **Lane B**
-1. Ledger schema and SQL functions: reserve (lock windows in ascending ID order; check; increment; insert attempt), settle (idempotent on attempt ID), release, mark-unknown.
-2. B1, B2, B5 property tests in Python against the stack's Postgres container and the mock provider, with concurrency, crashes (container kills), and failover (Toxiproxy) injected.
+1. Ledger schema and SQL functions: reserve (read the org's budget policy and deny with its own error code if there is none; lock windows in ascending ID order; check; increment; insert attempt), settle (idempotent on attempt ID), release, mark-unknown. Every function takes the org as an explicit argument from the authenticated identity; the ledger tables have no row-level security in v1 (spec 4, 7.6).
+2. B1, B2, B5 (including an org with no budget policy) property tests in Python against the stack's Postgres container and the mock provider, with concurrency, crashes (container kills), and failover (Toxiproxy) injected.
 3. Price-book schema covering every rule type in spec 6.3; Python reference implementation; golden fixtures, including the Opus 5.5 fast plus US-only example that must equal $0.209.
 4. Anthropic and OpenAI adapter fixtures from Lane A's recordings.
 
@@ -158,9 +160,10 @@ Sum of targets through G4: 12 weeks.
 
 **Lane D**
 1. Auth-service evaluation against requirements: TOTP and passkey MFA, OIDC and SAML SSO, SCIM. ADR.
-2. FastAPI skeleton: orgs, workspaces, users, roles; OpenAPI export; generated TypeScript client; drift check (A1); its Dockerfile, added to the Compose stack.
-3. Device enrollment through an OAuth device-authorization flow; control-plane CA issuing mTLS client certificates.
-4. Console shell on the generated client.
+2. FastAPI skeleton: orgs, workspaces, users, roles; OpenAPI export; generated TypeScript client; drift check (A1); its Dockerfile, added to the Compose stack. Tokens are validated against the configured OIDC issuer and audience, and every org-scoped table outside the ledger has a forced row-level security policy from the first migration (spec 4, A5). Only platform operators create orgs and assign an org's first owner; each operator call requires an MFA-level `acr` and writes an audit row; creating an org writes its budget policy row (spec 7.1).
+3. Install bootstrap command (spec 9.1, D4): one idempotent control-plane task that generates the realm, admin-client secrets, signing keys, the device CA, HMAC keys, and the first admin, who is also the first platform operator, with MFA required. No default credentials outside the dev profile.
+4. Device enrollment through an OAuth device-authorization flow; control-plane CA issuing mTLS client certificates.
+5. Console shell on the generated client.
 
 ## 8. Definition of done for a pull request
 
@@ -199,11 +202,17 @@ Sum of targets through G4: 12 weeks.
 | Build spend on providers | $20 to start, raised deliberately when needed |
 | Packaging | Containers first: every service is an image and the build runs on one Compose stack. Native only for laptops, the `purser` CLI, and hosts without a container runtime; managed Postgres and secrets (spec 9) |
 
+**Made (2026-10-09):**
+
+| Decision | Outcome |
+|---|---|
+| Auth service | Keycloak, self-hosted on ECS Fargate against its own RDS instance; one realm per install with Keycloak Organizations as customer orgs ([ADR 0003](adr/0003-auth-service.md)) |
+| Deployment model | v1 is our hosted multi-tenant service, and that is the revenue model. Orgs are isolated by org ID in every query, by row-level security, and by Keycloak Organizations in one realm (A5). Deferred, each with an entry criterion in spec section 12: a customer-hosted relay with our hosted control plane (the first customer who requires content to stay in their network), the self-hosted org install (the first design partner or paying customer who requires it), a dedicated per-org instance as a premium tier (the first customer who will pay for it), and personal mode (after the release candidate, possibly as a free tier). Applying now: every install generates its own secrets through one bootstrap command, with no default credentials outside dev (D4); the data model stays multi-org; the control plane validates tokens against a configured OIDC issuer. The v1 schedule doesn't change (6). |
+
 **Still open:**
 
 | Decision | Needed by |
 |---|---|
-| Auth service (Lane D evaluates; Andrew approves the ADR) | G0 |
 | The two reference laptops for the bake-off | Start of Phase 1 |
 | Hosted orchestration: ECS on Fargate (proposed; no control-plane fee) or EKS ($0.10 per cluster-hour on standard support, $73.00 for a 730-hour month) | Start of Phase 2 |
 | Public registry for customers to pull the sidecar image | G3 |
@@ -259,6 +268,10 @@ budgets and metering every request. Spec: docs/architecture.md. Guarantee IDs
 - Pass-through traffic is forwarded byte for byte.
 - Images carry no credentials, run as non-root on a read-only root filesystem,
   and contain the same binary as the native release.
+- Every install generates its own secrets and keys; no default credentials
+  outside dev.
+- Every request-path query on org data filters by org ID. Row-level security backs
+  it up on control-plane tables; the ledger takes the org explicitly and fails closed.
 
 ## Workflow
 1. Plan mode first; reference the guarantee IDs the change affects.
