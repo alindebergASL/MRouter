@@ -155,10 +155,12 @@ services:
   controlplane-db-init:
     # One-shot: the control plane's roles (owner, app, sweeper) and its schema in
     # purser_dev, for row-level security. Idempotent; runs on every `up`.
+    # It runs after keycloak-db-init, never beside it: both change purser_dev's
+    # ACL, and concurrent changes fail with "tuple concurrently updated".
     image: public.ecr.aws/docker/library/postgres:18.6-trixie@sha256:74935e72241653ca55e0414067e6d8763aceb8a810eb51b452253ec3dcfc4336
     depends_on:
-      postgres:
-        condition: service_healthy
+      keycloak-db-init:
+        condition: service_completed_successfully
     environment:
       PGPASSWORD: purser-dev-only-not-a-secret
     entrypoint: ["psql", "-h", "postgres", "-U", "purser_dev", "-d", "purser_dev",
