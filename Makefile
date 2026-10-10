@@ -1,11 +1,15 @@
 # Purser: the same commands locally and in CI (build plan §3).
 
-COMPOSE := docker compose -f deploy/compose/dev.yaml
+# In a Claude Code cloud session, containers need the egress CA bundle
+# (deploy/compose/cloud.override.yaml). Elsewhere the file doesn't exist.
+EGRESS_CA := $(wildcard /root/.ccr/ca-bundle.crt)
+COMPOSE := docker compose -f deploy/compose/dev.yaml $(if $(EGRESS_CA),-f deploy/compose/cloud.override.yaml)
 SHELL_SCRIPTS := $(wildcard scripts/*.sh .claude/hooks/*.sh)
 
 .DEFAULT_GOAL := help
 .PHONY: help dev-up dev-down dev-reset dev-ps dev-logs dev-psql dev-check dev-token \
-        check-pins check-hooks lint test images
+        check-pins check-hooks lint test images \
+        cp-sync cp-lock cp-lint cp-fmt cp-test-unit cp-test cp-migrate
 
 help: ## List targets
 	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  %-12s %s\n", $$1, $$2}'
@@ -33,6 +37,35 @@ dev-check: ## Smoke-check the dev stack's Keycloak (issuer, token claims, admin 
 
 dev-token: ## Print a dev-realm access token: make dev-token WHO=alice|bob
 	@scripts/dev-token.sh "$${WHO:-bob}"
+
+# Control plane (controlplane/CLAUDE.md). Every step runs in the pinned Python
+# 3.13 tool container. cp-tools shares Keycloak's network namespace and needs
+# the stack (make dev-up); cp-tools-solo needs nothing running.
+CP_TOOLS := $(COMPOSE) run --rm -T cp-tools /src/controlplane/scripts/run.sh
+CP_SOLO := $(COMPOSE) run --rm -T --no-deps cp-tools-solo /src/controlplane/scripts/run.sh
+HOST_IDS := $(shell id -u):$(shell id -g)
+
+cp-sync: ## Control plane: install the locked dependencies into the tool container's venv
+	$(CP_SOLO) sync
+
+cp-lock: ## Control plane: re-lock (uv.lock) and export requirements.lock with hashes
+	$(CP_SOLO) lock
+	$(COMPOSE) run --rm -T --no-deps --entrypoint chown cp-tools-solo $(HOST_IDS) uv.lock requirements.lock
+
+cp-lint: ## Control plane: ruff check, ruff format --check, mypy --strict
+	$(CP_SOLO) lint
+
+cp-fmt: ## Control plane: format and autofix (FILES=path ... to limit)
+	$(CP_SOLO) fmt $(FILES)
+
+cp-test-unit: ## Control plane: unit tests (no stack needed)
+	$(CP_SOLO) test-unit
+
+cp-test: ## Control plane: every test, against the dev stack (make dev-up first)
+	$(CP_TOOLS) test
+
+cp-migrate: ## Control plane: migrate the dev database to head (as the owner role)
+	$(CP_TOOLS) migrate
 
 check-pins: ## Every Compose image is pinned by digest and pre-pulled by cloud-setup.sh
 	scripts/check-image-pins.sh

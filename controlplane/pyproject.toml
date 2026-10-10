@@ -1,0 +1,76 @@
+[project]
+name = "purser-controlplane"
+version = "0.1.0"
+description = "Purser control plane: identity, orgs and RBAC, and the admin API"
+requires-python = ">=3.13,<3.14"
+dependencies = [
+  "fastapi>=0.135",
+  "uvicorn>=0.40",
+  "pydantic>=2.12",
+  "pydantic-settings>=2.10",
+  "sqlalchemy>=2.0.40",
+  "psycopg[binary]>=3.2",
+  "alembic>=1.16",
+  "pyjwt[crypto]>=2.10",
+  "httpx>=0.28",
+  "email-validator>=2.2",
+]
+
+[dependency-groups]
+dev = [
+  "pytest>=8.4",
+  "pytest-httpserver>=1.1",
+  "ruff>=0.13",
+  "mypy>=1.18",
+]
+
+[build-system]
+requires = ["hatchling>=1.27"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/purser_controlplane"]
+
+[tool.uv]
+# Supply-chain cooldown: resolve only releases at least two weeks old at lock
+# time. Move this date forward deliberately when re-locking.
+exclude-newer = "2026-09-25T00:00:00Z"
+
+[tool.ruff]
+line-length = 100
+target-version = "py313"
+cache-dir = "/cache/ruff"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "S", "SIM", "RUF", "N", "A", "C4", "PT", "RET", "TID"]
+ignore = ["S101"]
+
+[tool.ruff.lint.isort]
+# The local alembic/ directory holds migrations, not the alembic package.
+known-third-party = ["alembic"]
+known-first-party = ["purser_controlplane", "tests"]
+
+[tool.ruff.lint.per-file-ignores]
+# Tests: dev credentials, SQL over constant table names, compound asserts, long literals.
+"tests/**" = ["S105", "S106", "S311", "S608", "PT018", "E501"]
+# DDL assembled from module constants and role names validated by a regex.
+"alembic/**" = ["N999", "S608"]
+
+[tool.mypy]
+python_version = "3.13"
+strict = true
+plugins = ["pydantic.mypy"]
+cache_dir = "/cache/mypy"
+mypy_path = "src"
+packages = ["purser_controlplane"]
+
+[[tool.mypy.overrides]]
+module = ["pytest_httpserver.*"]
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-p no:cacheprovider -ra --strict-markers"
+markers = [
+  "stack: needs the dev stack (Postgres and Keycloak)",
+]

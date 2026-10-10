@@ -1,0 +1,19 @@
+# Claude Code cloud sessions only: containers reach the network through an
+# egress gateway that re-signs TLS, so tool containers trust the session's CA
+# bundle (see README, "Network access from containers"). The Makefile adds
+# this file automatically when /root/.ccr/ca-bundle.crt exists. Never use it
+# elsewhere, and never bake the CA into an image (D2).
+
+x-egress-ca: &egress-ca
+  volumes:
+    - /root/.ccr/ca-bundle.crt:/etc/purser/egress-ca.crt:ro
+  environment:
+    SSL_CERT_FILE: /etc/purser/egress-ca.crt
+    PIP_CERT: /etc/purser/egress-ca.crt
+    UV_SYSTEM_CERTS: "true"
+    REQUESTS_CA_BUNDLE: /etc/purser/egress-ca.crt
+    NODE_EXTRA_CA_CERTS: /etc/purser/egress-ca.crt
+
+services:
+  cp-tools: *egress-ca
+  cp-tools-solo: *egress-ca
