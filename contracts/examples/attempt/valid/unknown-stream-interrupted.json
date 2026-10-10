@@ -1,6 +1,7 @@
 {
   "schema_version": "0.1.0",
   "attempt_id": "70c3915f-a284-4d35-b176-8495a31bc1d7",
+  "org_id": "org_acme",
   "state": "unknown",
   "reserved_at": "2026-10-09T15:30:44.600Z",
   "ceiling_nanodollars": 2050000000,

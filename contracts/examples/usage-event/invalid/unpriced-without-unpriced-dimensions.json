@@ -86,9 +86,8 @@
       "unavailable_reason": "not_applicable"
     },
     "cache_write_unspecified": {
-      "value": null,
-      "evidence": "unavailable",
-      "unavailable_reason": "not_reported"
+      "value": 0,
+      "evidence": "measured"
     },
     "output": {
       "value": 3100,

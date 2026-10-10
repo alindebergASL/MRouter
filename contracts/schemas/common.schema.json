@@ -121,7 +121,7 @@
       "enum": ["reconciled", "measured", "inferred", "estimated", "unavailable"]
     },
     "unavailable_reason": {
-      "description": "Why a value is unavailable. not_reported: the source does not provide it. not_applicable: the dimension does not exist for this provider or path. stream_interrupted: lost when the stream was cut. usage_unavailable: no usage was obtained, so cost cannot be computed. pending_reconciliation: waiting for provider billing data. unpriced: the price book does not cover the attempt (6.3). not_billed: a local model, metered but never billed. unrecognized_format: a trace format the reader does not recognize (6.6). unrecognized_value: a request or response value outside the enumerated set; the raw value is not stored (C2). no_response: the attempt produced no response.",
+      "description": "Why a value is unavailable. not_reported: the source does not provide it. not_applicable: the dimension does not exist for this provider or path. stream_interrupted: lost when the stream was cut. usage_unavailable: no usage was obtained, so cost cannot be computed. pending_reconciliation: waiting for provider billing data. unpriced: the price book does not cover the attempt (6.3). not_billed: a local model, metered but never billed. unrecognized_format: a trace format the reader does not recognize (6.6). unrecognized_value: a request or response value outside the enumerated set; the raw value is not stored (C2). no_response: the attempt produced no response. error_response: the provider answered with an error before any output, so it reported no usage.",
       "enum": [
         "not_reported",
         "not_applicable",
@@ -132,7 +132,8 @@
         "not_billed",
         "unrecognized_format",
         "unrecognized_value",
-        "no_response"
+        "no_response",
+        "error_response"
       ]
     },
     "evidence_rules": {

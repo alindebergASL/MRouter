@@ -8,6 +8,7 @@
   "required": [
     "schema_version",
     "attempt_id",
+    "org_id",
     "state",
     "reserved_at",
     "ceiling_nanodollars",
@@ -19,6 +20,10 @@
   "properties": {
     "schema_version": {"$ref": "urn:purser:contracts:common:0.1.0#/$defs/schema_version"},
     "attempt_id": {"$ref": "urn:purser:contracts:common:0.1.0#/$defs/uuid"},
+    "org_id": {
+      "description": "The org the attempt is for, taken from the authenticated identity. The ledger functions take it as an explicit argument and never infer it from the rows found (spec 0.6, sections 4 and 7.6); settlement checks it.",
+      "$ref": "urn:purser:contracts:common:0.1.0#/$defs/id"
+    },
     "state": {"$ref": "#/$defs/state"},
     "reserved_at": {
       "description": "When the reservation transaction committed.",
@@ -55,8 +60,14 @@
       "enum": ["upstream_connect_failed"]
     },
     "unknown_reason": {
-      "description": "Why the outcome became uncertain after dispatch (7.5). Kept after an unknown attempt settles.",
-      "enum": ["stream_interrupted", "client_disconnect", "relay_crash", "timeout"]
+      "description": "Why the outcome became uncertain after dispatch (7.5). upstream_error_after_output: the provider sent an error after output had begun, so part of the response may be billed; it settles from partial stream usage, or by ceiling charge if none was reported. Kept after an unknown attempt settles.",
+      "enum": [
+        "stream_interrupted",
+        "client_disconnect",
+        "relay_crash",
+        "timeout",
+        "upstream_error_after_output"
+      ]
     },
     "settlement": {"$ref": "#/$defs/settlement"}
   },
@@ -114,10 +125,13 @@
       "else": {"not": {"required": ["settlement"]}}
     },
     {
-      "$comment": "Usage from the response the relay handled settles directly from dispatched.",
+      "$comment": "Usage from the response the relay handled, or an error before any output, settles directly from dispatched.",
       "if": {
         "properties": {
-          "settlement": {"properties": {"basis": {"const": "response_usage"}}, "required": ["basis"]}
+          "settlement": {
+            "properties": {"basis": {"enum": ["response_usage", "upstream_error"]}},
+            "required": ["basis"]
+          }
         },
         "required": ["settlement"]
       },
@@ -183,6 +197,20 @@
           }
         }
       }
+    },
+    {
+      "$comment": "An error before any output is charged nothing and cannot overrun.",
+      "if": {
+        "properties": {
+          "settlement": {"properties": {"basis": {"const": "upstream_error"}}, "required": ["basis"]}
+        },
+        "required": ["settlement"]
+      },
+      "then": {
+        "properties": {
+          "settlement": {"properties": {"cost_nanodollars": {"const": 0}, "overrun": {"const": false}}}
+        }
+      }
     }
   ],
   "$defs": {
@@ -222,12 +250,18 @@
       "required": ["from", "to"]
     },
     "settlement": {
-      "description": "How a settled attempt's cost was established (7.5, 7.6). response_usage: usage in the response the relay handled, on the direct path. On the path through unknown: partial_stream_usage (exact usage found in partial stream events), provider_usage_by_request_id (provider usage data matched by request ID), or ceiling_charge (no exact usage within the reconciliation window, so the full ceiling is charged). cost_nanodollars is null only for an unbounded meter-only attempt whose usage could not be priced or obtained, with cost_unavailable_reason; it is never 0 in place of unpriced (6.3). overrun is true when cost exceeded the ceiling, an invariant breach handled as an incident (7.6).",
+      "description": "How a settled attempt's cost was established (7.5, 7.6). response_usage: usage in the response the relay handled, on the direct path. upstream_error: the provider answered with an error before any output began, also on the direct path; it is charged 0 (whether every provider bills nothing for such errors is an open question in the PR). An error after output began is unknown first, then settles from partial stream usage or by ceiling charge. On the path through unknown: partial_stream_usage (exact usage found in partial stream events), provider_usage_by_request_id (provider usage data matched by request ID), or ceiling_charge (no exact usage within the reconciliation window, so the full ceiling is charged). cost_nanodollars is null only for an unbounded meter-only attempt whose usage could not be priced or obtained, with cost_unavailable_reason; it is never 0 in place of unpriced (6.3). overrun is true when cost exceeded the ceiling, an invariant breach handled as an incident (7.6).",
       "type": "object",
       "required": ["basis", "cost_nanodollars", "overrun"],
       "properties": {
         "basis": {
-          "enum": ["response_usage", "partial_stream_usage", "provider_usage_by_request_id", "ceiling_charge"]
+          "enum": [
+            "response_usage",
+            "upstream_error",
+            "partial_stream_usage",
+            "provider_usage_by_request_id",
+            "ceiling_charge"
+          ]
         },
         "cost_nanodollars": {
           "oneOf": [{"$ref": "urn:purser:contracts:common:0.1.0#/$defs/nanodollars"}, {"type": "null"}]

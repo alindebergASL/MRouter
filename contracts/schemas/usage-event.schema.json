@@ -3,7 +3,7 @@
   "$id": "urn:purser:contracts:usage-event:0.1.0",
   "title": "Usage event",
   "description": "One usage record per upstream attempt that was dispatched, including relay retries, failures, and unknown outcomes (architecture 6.1, M1). A released attempt sent no byte upstream, so it has no usage record. The record is keyed by attempt_id and updated in place with a higher revision when an unknown attempt settles or reconciliation fills in billed cost. Token counts and costs carry an evidence tier (6.5); an unavailable value is null with a reason, never 0. The record holds identifiers, counts, and money only: no field can carry prompt or response text (C2).",
-  "$comment": "Cross-field rules, checked on examples by the validator: settled_at and recorded_at are not before dispatched_at; ttfb_ms is not above duration_ms; retry_of_attempt_id differs from attempt_id; fees has at most one entry per fee_id.",
+  "$comment": "Cross-field rules, checked on examples by the validator: settled_at and recorded_at are not before dispatched_at; ttfb_ms is not above duration_ms; retry_of_attempt_id differs from attempt_id; fees has at most one entry per fee_id; when the provider's cache-write split (5m + 1h, plus unspecified) disagrees with cache_write_total, flags contains usage_inconsistent (6.3).",
   "type": "object",
   "required": [
     "schema_version",
@@ -274,16 +274,70 @@
       }
     },
     {
-      "$comment": "M4: a relay or public-listener response priced from usage carries the keyed hash that deduplicates trace events against it.",
+      "$comment": "M4: a relay or public-listener record whose provider reported usage (any measured priced count) carries the keyed hash that deduplicates trace events against it, whether or not the attempt could be priced.",
       "if": {
         "properties": {
           "routing": {
             "properties": {"data_path": {"enum": ["relay", "public_listener"]}},
             "required": ["data_path"]
           },
-          "computed_cost": {"properties": {"basis": {"const": "usage"}}, "required": ["basis"]}
+          "tokens": {
+            "anyOf": [
+              {
+                "properties": {
+                  "uncached_input": {
+                    "properties": {"evidence": {"const": "measured"}},
+                    "required": ["evidence"]
+                  }
+                },
+                "required": ["uncached_input"]
+              },
+              {
+                "properties": {
+                  "cache_read": {"properties": {"evidence": {"const": "measured"}}, "required": ["evidence"]}
+                },
+                "required": ["cache_read"]
+              },
+              {
+                "properties": {
+                  "cache_write_5m": {
+                    "properties": {"evidence": {"const": "measured"}},
+                    "required": ["evidence"]
+                  }
+                },
+                "required": ["cache_write_5m"]
+              },
+              {
+                "properties": {
+                  "cache_write_1h": {
+                    "properties": {"evidence": {"const": "measured"}},
+                    "required": ["evidence"]
+                  }
+                },
+                "required": ["cache_write_1h"]
+              },
+              {
+                "properties": {
+                  "cache_write_unspecified": {
+                    "properties": {"evidence": {"const": "measured"}},
+                    "required": ["evidence"]
+                  }
+                },
+                "required": ["cache_write_unspecified"]
+              },
+              {
+                "properties": {
+                  "output": {"properties": {"evidence": {"const": "measured"}}, "required": ["evidence"]}
+                },
+                "required": ["output"]
+              }
+            ]
+          },
+          "computed_cost": {
+            "not": {"properties": {"basis": {"const": "upstream_error"}}, "required": ["basis"]}
+          }
         },
-        "required": ["routing", "computed_cost"]
+        "required": ["routing", "tokens", "computed_cost"]
       },
       "then": {
         "properties": {
@@ -366,6 +420,293 @@
           }
         }
       }
+    },
+    {
+      "$comment": "An error before any output began is charged 0 and inferred from the error status, only on a settled attempt, and only if no output was produced: every priced count and fee count is 0 or absent (error_response). Billed partial output is never recorded as 0.",
+      "if": {
+        "properties": {
+          "computed_cost": {"properties": {"basis": {"const": "upstream_error"}}, "required": ["basis"]}
+        },
+        "required": ["computed_cost"]
+      },
+      "then": {
+        "properties": {
+          "state": {"const": "settled"},
+          "computed_cost": {"properties": {"nanodollars": {"const": 0}, "evidence": {"const": "inferred"}}},
+          "tokens": {
+            "properties": {
+              "uncached_input": {
+                "anyOf": [
+                  {"properties": {"value": {"const": 0}}, "required": ["value"]},
+                  {
+                    "properties": {"unavailable_reason": {"enum": ["error_response", "not_applicable"]}},
+                    "required": ["unavailable_reason"]
+                  }
+                ]
+              },
+              "cache_read": {
+                "anyOf": [
+                  {"properties": {"value": {"const": 0}}, "required": ["value"]},
+                  {
+                    "properties": {"unavailable_reason": {"enum": ["error_response", "not_applicable"]}},
+                    "required": ["unavailable_reason"]
+                  }
+                ]
+              },
+              "cache_write_5m": {
+                "anyOf": [
+                  {"properties": {"value": {"const": 0}}, "required": ["value"]},
+                  {
+                    "properties": {"unavailable_reason": {"enum": ["error_response", "not_applicable"]}},
+                    "required": ["unavailable_reason"]
+                  }
+                ]
+              },
+              "cache_write_1h": {
+                "anyOf": [
+                  {"properties": {"value": {"const": 0}}, "required": ["value"]},
+                  {
+                    "properties": {"unavailable_reason": {"enum": ["error_response", "not_applicable"]}},
+                    "required": ["unavailable_reason"]
+                  }
+                ]
+              },
+              "cache_write_unspecified": {
+                "anyOf": [
+                  {"properties": {"value": {"const": 0}}, "required": ["value"]},
+                  {
+                    "properties": {"unavailable_reason": {"enum": ["error_response", "not_applicable"]}},
+                    "required": ["unavailable_reason"]
+                  }
+                ]
+              },
+              "output": {
+                "anyOf": [
+                  {"properties": {"value": {"const": 0}}, "required": ["value"]},
+                  {
+                    "properties": {"unavailable_reason": {"enum": ["error_response", "not_applicable"]}},
+                    "required": ["unavailable_reason"]
+                  }
+                ]
+              }
+            }
+          },
+          "fees": {
+            "items": {
+              "properties": {
+                "count": {
+                  "anyOf": [
+                    {"properties": {"value": {"const": 0}}, "required": ["value"]},
+                    {
+                      "properties": {"unavailable_reason": {"enum": ["error_response", "not_applicable"]}},
+                      "required": ["unavailable_reason"]
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "$comment": "A ceiling charge means no exact usage was found (7.5): some priced count or fee count is missing.",
+      "if": {
+        "properties": {
+          "computed_cost": {"properties": {"basis": {"const": "ceiling_charge"}}, "required": ["basis"]}
+        },
+        "required": ["computed_cost"]
+      },
+      "then": {
+        "anyOf": [
+          {
+            "properties": {
+              "tokens": {
+                "anyOf": [
+                  {
+                    "properties": {
+                      "uncached_input": {
+                        "properties": {
+                          "unavailable_reason": {
+                            "enum": ["not_reported", "stream_interrupted", "no_response"]
+                          }
+                        },
+                        "required": ["unavailable_reason"]
+                      }
+                    },
+                    "required": ["uncached_input"]
+                  },
+                  {
+                    "properties": {
+                      "cache_read": {
+                        "properties": {
+                          "unavailable_reason": {
+                            "enum": ["not_reported", "stream_interrupted", "no_response"]
+                          }
+                        },
+                        "required": ["unavailable_reason"]
+                      }
+                    },
+                    "required": ["cache_read"]
+                  },
+                  {
+                    "properties": {
+                      "cache_write_5m": {
+                        "properties": {
+                          "unavailable_reason": {
+                            "enum": ["not_reported", "stream_interrupted", "no_response"]
+                          }
+                        },
+                        "required": ["unavailable_reason"]
+                      }
+                    },
+                    "required": ["cache_write_5m"]
+                  },
+                  {
+                    "properties": {
+                      "cache_write_1h": {
+                        "properties": {
+                          "unavailable_reason": {
+                            "enum": ["not_reported", "stream_interrupted", "no_response"]
+                          }
+                        },
+                        "required": ["unavailable_reason"]
+                      }
+                    },
+                    "required": ["cache_write_1h"]
+                  },
+                  {
+                    "properties": {
+                      "cache_write_unspecified": {
+                        "properties": {
+                          "unavailable_reason": {
+                            "enum": ["not_reported", "stream_interrupted", "no_response"]
+                          }
+                        },
+                        "required": ["unavailable_reason"]
+                      }
+                    },
+                    "required": ["cache_write_unspecified"]
+                  },
+                  {
+                    "properties": {
+                      "output": {
+                        "properties": {
+                          "unavailable_reason": {
+                            "enum": ["not_reported", "stream_interrupted", "no_response"]
+                          }
+                        },
+                        "required": ["unavailable_reason"]
+                      }
+                    },
+                    "required": ["output"]
+                  }
+                ]
+              }
+            }
+          },
+          {
+            "properties": {
+              "fees": {
+                "contains": {"properties": {"count": {"properties": {"evidence": {"const": "unavailable"}}}}}
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "$comment": "Anthropic reports input, cache reads, and 5-minute and 1-hour cache writes separately (6.2), so none of those is ever not_applicable, and its writes always carry a TTL, so cache_write_unspecified never holds a count.",
+      "if": {
+        "properties": {
+          "routing": {"properties": {"provider": {"const": "anthropic"}}, "required": ["provider"]}
+        },
+        "required": ["routing"]
+      },
+      "then": {
+        "properties": {
+          "tokens": {
+            "properties": {
+              "uncached_input": {
+                "not": {
+                  "properties": {"unavailable_reason": {"const": "not_applicable"}},
+                  "required": ["unavailable_reason"]
+                }
+              },
+              "cache_read": {
+                "not": {
+                  "properties": {"unavailable_reason": {"const": "not_applicable"}},
+                  "required": ["unavailable_reason"]
+                }
+              },
+              "cache_write_5m": {
+                "not": {
+                  "properties": {"unavailable_reason": {"const": "not_applicable"}},
+                  "required": ["unavailable_reason"]
+                }
+              },
+              "cache_write_1h": {
+                "not": {
+                  "properties": {"unavailable_reason": {"const": "not_applicable"}},
+                  "required": ["unavailable_reason"]
+                }
+              },
+              "output": {
+                "not": {
+                  "properties": {"unavailable_reason": {"const": "not_applicable"}},
+                  "required": ["unavailable_reason"]
+                }
+              },
+              "cache_write_unspecified": {"properties": {"value": {"type": "null"}}}
+            }
+          }
+        }
+      }
+    },
+    {
+      "$comment": "OpenAI cache writes carry no TTL (6.2): the 5-minute and 1-hour classes never apply, and the others always do.",
+      "if": {
+        "properties": {"routing": {"properties": {"provider": {"const": "openai"}}, "required": ["provider"]}},
+        "required": ["routing"]
+      },
+      "then": {
+        "properties": {
+          "tokens": {
+            "properties": {
+              "cache_write_5m": {
+                "properties": {"value": {"type": "null"}, "unavailable_reason": {"const": "not_applicable"}}
+              },
+              "cache_write_1h": {
+                "properties": {"value": {"type": "null"}, "unavailable_reason": {"const": "not_applicable"}}
+              },
+              "uncached_input": {
+                "not": {
+                  "properties": {"unavailable_reason": {"const": "not_applicable"}},
+                  "required": ["unavailable_reason"]
+                }
+              },
+              "cache_read": {
+                "not": {
+                  "properties": {"unavailable_reason": {"const": "not_applicable"}},
+                  "required": ["unavailable_reason"]
+                }
+              },
+              "cache_write_unspecified": {
+                "not": {
+                  "properties": {"unavailable_reason": {"const": "not_applicable"}},
+                  "required": ["unavailable_reason"]
+                }
+              },
+              "output": {
+                "not": {
+                  "properties": {"unavailable_reason": {"const": "not_applicable"}},
+                  "required": ["unavailable_reason"]
+                }
+              }
+            }
+          }
+        }
+      }
     }
   ],
   "$defs": {
@@ -378,7 +719,7 @@
       "properties": {
         "evidence": {"$ref": "#/$defs/relay_evidence"},
         "unavailable_reason": {
-          "enum": ["not_reported", "not_applicable", "stream_interrupted", "no_response"]
+          "enum": ["not_reported", "not_applicable", "stream_interrupted", "no_response", "error_response"]
         }
       }
     },
@@ -401,7 +742,7 @@
       "properties": {
         "evidence": {"$ref": "#/$defs/relay_evidence"},
         "unavailable_reason": {
-          "enum": ["not_reported", "not_applicable", "stream_interrupted", "no_response"]
+          "enum": ["not_reported", "not_applicable", "stream_interrupted", "no_response", "error_response"]
         }
       }
     },
@@ -574,7 +915,7 @@
       "additionalProperties": false
     },
     "tokens": {
-      "description": "Token counts by class (6.1, 6.2). Priced classes: uncached_input, cache_read, cache_write_5m, cache_write_1h, cache_write_unspecified (writes whose provider reports no TTL, such as OpenAI), output. Informational, never priced again: reasoning (already counted in output where the provider reports it) and cache_write_total (the provider's own total, such as Anthropic cache_creation_input_tokens, kept so an inconsistent split stays visible).",
+      "description": "Token counts by class (6.1, 6.2). Priced classes: uncached_input, cache_read, cache_write_5m, cache_write_1h, cache_write_unspecified (writes whose provider reports no TTL: OpenAI; never Anthropic), output. Informational, never priced again: reasoning (already counted in output where the provider reports it) and cache_write_total (the provider's own total, such as Anthropic cache_creation_input_tokens, kept so an inconsistent split stays visible).",
       "type": "object",
       "required": [
         "uncached_input",
@@ -624,7 +965,7 @@
       ]
     },
     "computed_cost": {
-      "description": "Cost computed by the relay from the price book, rounded once per attempt to integer nano-dollars (6.4). basis usage: priced from token counts and fees. basis ceiling_charge: an unknown attempt with no exact usage found within the reconciliation window, charged its full ceiling (7.5). Null with a reason when it cannot be computed: unpriced (with unpriced_dimensions), usage_unavailable, or not_billed.",
+      "description": "Cost computed by the relay from the price book, rounded once per attempt to integer nano-dollars (6.4). basis usage: priced from token counts and fees. basis upstream_error: the provider answered with an error before any output began, charged 0 (7.5; an error after output began settles from partial stream usage or by ceiling charge instead). basis ceiling_charge: an unknown attempt with no exact usage found within the reconciliation window, charged its full ceiling (7.5). Null with a reason when it cannot be computed: unpriced (with unpriced_dimensions), usage_unavailable, or not_billed.",
       "type": "object",
       "required": ["nanodollars", "evidence", "basis"],
       "properties": {
@@ -635,7 +976,7 @@
           "description": "measured or inferred when computed from usage; inferred for a ceiling charge; unavailable when null. How cost evidence derives from token evidence, and the tier of a ceiling charge, are open questions in the PR.",
           "enum": ["measured", "inferred", "unavailable"]
         },
-        "basis": {"enum": ["usage", "ceiling_charge", null]},
+        "basis": {"enum": ["usage", "ceiling_charge", "upstream_error", null]},
         "unavailable_reason": {"enum": ["unpriced", "usage_unavailable", "not_billed"]},
         "unpriced_dimensions": {
           "type": "array",
@@ -656,7 +997,7 @@
           "else": {
             "properties": {
               "nanodollars": {"$ref": "urn:purser:contracts:common:0.1.0#/$defs/nanodollars"},
-              "basis": {"enum": ["usage", "ceiling_charge"]}
+              "basis": {"enum": ["usage", "ceiling_charge", "upstream_error"]}
             },
             "not": {"anyOf": [{"required": ["unavailable_reason"]}, {"required": ["unpriced_dimensions"]}]}
           }

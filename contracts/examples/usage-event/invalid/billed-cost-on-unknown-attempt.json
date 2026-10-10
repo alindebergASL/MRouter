@@ -89,7 +89,7 @@
     "cache_write_unspecified": {
       "value": null,
       "evidence": "unavailable",
-      "unavailable_reason": "not_reported"
+      "unavailable_reason": "stream_interrupted"
     },
     "output": {
       "value": null,

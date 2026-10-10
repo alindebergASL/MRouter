@@ -44,6 +44,11 @@
     "keyword": "additionalProperties",
     "why": "The attempt record is closed and holds no free text, so a note field could carry prompt content (C2)."
   },
+  "missing-org-id.json": {
+    "path": "",
+    "keyword": "required",
+    "why": "The ledger takes the org explicitly from the authenticated identity and settlement checks it (spec 0.6, 7.6)."
+  },
   "missing-price-book-version.json": {
     "path": "",
     "keyword": "required",
@@ -83,5 +88,10 @@
     "path": "",
     "keyword": "not",
     "why": "An unbounded attempt's ceiling is unavailable, which is null with a reason, never zero."
+  },
+  "upstream-error-with-cost.json": {
+    "path": "/settlement/cost_nanodollars",
+    "keyword": "const",
+    "why": "An error before any output began is charged 0; billed partial output settles from partial stream usage instead."
   }
 }

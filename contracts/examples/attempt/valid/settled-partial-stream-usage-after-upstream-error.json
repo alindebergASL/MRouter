@@ -1,10 +1,10 @@
 {
   "schema_version": "0.1.0",
-  "attempt_id": "4d906e2c-7f51-4a02-9e43-5162708f9ea4",
+  "attempt_id": "8d2f3e4a-5b6c-4d7e-9f8a-0b1c2d3e4f5a",
   "org_id": "org_acme",
   "state": "settled",
-  "reserved_at": "2026-10-09T14:10:00.512Z",
-  "ceiling_nanodollars": 2050000000,
+  "reserved_at": "2026-10-09T15:12:08.040Z",
+  "ceiling_nanodollars": 1800000000,
   "budget_window_ids": [
     "win-org_acme-month-2026-10",
     "win-team_platform-day-2026-10-09",
@@ -16,23 +16,23 @@
     {
       "from": "reserved",
       "to": "dispatched",
-      "at": "2026-10-09T14:10:00.527Z"
+      "at": "2026-10-09T15:12:08.055Z"
     },
     {
       "from": "dispatched",
       "to": "unknown",
-      "at": "2026-10-09T14:20:00.527Z"
+      "at": "2026-10-09T15:12:29.771Z"
     },
     {
       "from": "unknown",
       "to": "settled",
-      "at": "2026-10-09T20:20:00.000Z"
+      "at": "2026-10-09T15:12:29.790Z"
     }
   ],
-  "unknown_reason": "timeout",
+  "unknown_reason": "upstream_error_after_output",
   "settlement": {
-    "basis": "ceiling_charge",
-    "cost_nanodollars": 2050000000,
+    "basis": "partial_stream_usage",
+    "cost_nanodollars": 187250000,
     "overrun": false
   }
 }

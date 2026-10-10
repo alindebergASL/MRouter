@@ -505,6 +505,13 @@ def _usage_event_rules(doc: dict[str, Any]) -> Iterator[tuple[str, str]]:
     fee_ids = [f.get("fee_id") for f in doc.get("fees", [])]
     if len(fee_ids) != len(set(fee_ids)):
         yield "fee_ids_distinct", "fees lists a fee_id more than once"
+    tokens = doc.get("tokens", {})
+    split = [tokens.get(k, {}).get("value") for k in ("cache_write_5m", "cache_write_1h")]
+    total = tokens.get("cache_write_total", {}).get("value")
+    if total is not None and None not in split:
+        unspecified = tokens.get("cache_write_unspecified", {}).get("value") or 0
+        if sum(split) + unspecified != total and "usage_inconsistent" not in doc.get("flags", []):
+            yield "usage_inconsistent_flagged", f"cache-write split {sum(split) + unspecified} != total {total} but not flagged (6.3)"
 
 
 def _error_envelope_rules(doc: dict[str, Any]) -> Iterator[tuple[str, str]]:

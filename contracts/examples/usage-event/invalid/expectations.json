@@ -1,18 +1,23 @@
 {
+  "anthropic-unspecified-cache-write.json": {
+    "path": "/tokens/cache_write_unspecified/value",
+    "keyword": "type",
+    "why": "Anthropic cache writes always carry a TTL (6.2), so a TTL-less count would be priced under the wrong rule."
+  },
   "billed-cost-on-unknown-attempt.json": {
     "path": "/provider_billed_cost/evidence",
     "keyword": "const",
     "why": "Provider data for an unknown attempt settles it (7.5), so an unknown record never carries a billed cost."
   },
+  "ceiling-charge-with-all-usage-known.json": {
+    "path": "",
+    "keyword": "anyOf",
+    "why": "A ceiling charge is only for an attempt whose exact usage was never found (7.5); this one has all of it."
+  },
   "estimated-evidence-on-relay-record.json": {
     "path": "/tokens/output/evidence",
     "keyword": "enum",
     "why": "Estimated values come only from trace readers; a relay usage record never carries them (6.5)."
-  },
-  "fee-listed-twice.json": {
-    "path": "",
-    "keyword": "semantic:fee_ids_distinct",
-    "why": "One entry per fee; a repeated fee_id would be counted twice when cost is recomputed (M2)."
   },
   "free-text-in-session-id.json": {
     "path": "/correlation/session_id/value",
@@ -27,7 +32,13 @@
   "local-provider-on-relay-path.json": {
     "path": "/routing/data_path",
     "keyword": "const",
-    "why": "Local models are reached only by the sidecar directly, never through the relay (2, 5)."
+    "why": "Local models are reached only by the sidecar directly, never through the relay (2, 5).",
+    "also": [
+      {
+        "path": "/correlation/provider_message_id_hmac/evidence",
+        "keyword": "not"
+      }
+    ]
   },
   "missing-message-hash-on-priced-response.json": {
     "path": "/correlation/provider_message_id_hmac/evidence",
@@ -48,6 +59,11 @@
     "path": "/dimensions/speed/value",
     "keyword": "type",
     "why": "OpenAI has no speed parameter; a mis-mapped setting would be priced under the wrong rule (6.2, 6.3)."
+  },
+  "openai-ttl-cache-write.json": {
+    "path": "/tokens/cache_write_5m/value",
+    "keyword": "type",
+    "why": "OpenAI cache writes carry no TTL (6.2); a 5-minute count on an OpenAI record would be priced at Anthropic's rule."
   },
   "prompt-excerpt-extra-property.json": {
     "path": "",
@@ -104,9 +120,19 @@
     "keyword": "required",
     "why": "Unpriced, not guessed: an unrecognized speed makes the attempt unpriced, never a computed amount (6.3, B3)."
   },
+  "upstream-error-with-output.json": {
+    "path": "/tokens/output",
+    "keyword": "anyOf",
+    "why": "An error after output began may be billed: it settles from partial stream usage or by ceiling charge, never as 0 (7.5)."
+  },
   "usage-cost-on-interrupted-count.json": {
     "path": "/tokens/output/unavailable_reason",
     "keyword": "const",
     "why": "A cost computed from usage cannot rest on a count that was lost: that prices unavailable as zero (6.5)."
+  },
+  "usage-split-not-flagged.json": {
+    "path": "",
+    "keyword": "semantic:usage_inconsistent_flagged",
+    "why": "Contradictory usage settles at the higher-cost reading and is flagged (6.3); an unflagged record hides it."
   }
 }
