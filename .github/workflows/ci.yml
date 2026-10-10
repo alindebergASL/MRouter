@@ -154,3 +154,6 @@ jobs:
 
       - name: Lint (shellcheck, actionlint)
         run: make lint
+
+      - name: Contracts (schemas, examples, pricing fixtures)
+        run: make check-contracts

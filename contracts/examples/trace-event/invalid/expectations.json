@@ -1,0 +1,47 @@
+{
+  "free-text-summary-at-root.json": {
+    "path": "",
+    "keyword": "additionalProperties",
+    "why": "The event is closed and has no free-text field, so a summary string at the root is rejected rather than carried off the device (improvement 1, C4)."
+  },
+  "unrecognized-format-count-not-reported.json": {
+    "path": "/tokens/output/unavailable_reason",
+    "keyword": "const",
+    "why": "When trace_format is unrecognized every token count must be unavailable for reason unrecognized_format, so the console can tell an uncertified harness version from a known format that lacks a class (improvement 5)."
+  },
+  "evidence-reconciled.json": {
+    "path": "/tokens/output/evidence",
+    "keyword": "enum",
+    "why": "Reconciled evidence comes only from matching provider billing data (6.5), never from a transcript, so a trace event cannot claim it."
+  },
+  "hmac-digest-uppercase-hex.json": {
+    "path": "/provider_message_id_hmac/value/digest",
+    "keyword": "pattern",
+    "why": "Digests are lowercase hex exactly as the relay writes them; an uppercase digest would never equal the relay's hash, so relay-covered usage would be counted twice (M4)."
+  },
+  "session-id-with-spaces.json": {
+    "path": "/session_id/value",
+    "keyword": "pattern",
+    "why": "Session IDs use the bounded identifier format with no whitespace, so the field cannot hold prose such as a session title (C4)."
+  },
+  "token-count-as-float.json": {
+    "path": "",
+    "keyword": "parse:float",
+    "why": "Token counts are integers and no JSON under contracts/ may hold a float (6.4)."
+  },
+  "hmac-algorithm-sha256-unkeyed.json": {
+    "path": "/provider_message_id_hmac/value/algorithm",
+    "keyword": "const",
+    "why": "Only HMAC-SHA256 under the per-org key is allowed; an unkeyed SHA-256 of a provider message ID can be recomputed by anyone holding the ID and would not match the relay's keyed hash (improvement 2, M4)."
+  },
+  "raw-provider-message-id-not-hashed.json": {
+    "path": "/provider_message_id_hmac/value",
+    "keyword": "type",
+    "why": "The provider message ID leaves the device only as a keyed-hash object, never as the raw ID string (improvement 2)."
+  },
+  "unavailable-count-given-as-zero.json": {
+    "path": "/tokens/reasoning/value",
+    "keyword": "type",
+    "why": "Unavailable is not zero: an unavailable count must have a null value, so Cursor's hidden reasoning cannot be reported as a measured-looking 0 (6.5, improvement 4)."
+  }
+}

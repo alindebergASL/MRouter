@@ -1,0 +1,66 @@
+{
+  "schema_version": "0.1.0",
+  "fixture_id": "opus-5-5-web-search",
+  "referenced_by": [
+    "M5",
+    "M2"
+  ],
+  "price_book": {
+    "path": "price-book.example.json",
+    "price_book_version": "2026-10-10.1",
+    "entry_id": "anthropic.claude-opus-5-5"
+  },
+  "request": {
+    "provider": "anthropic",
+    "model": "claude-opus-5-5",
+    "at": "2026-10-10T12:00:00Z",
+    "org_id": null,
+    "dimensions": {
+      "speed": null,
+      "service_tier": null,
+      "inference_geo": "global"
+    }
+  },
+  "usage": {
+    "tokens": {
+      "uncached_input": 1000,
+      "cache_read": 0,
+      "cache_write_5m": 0,
+      "cache_write_1h": 0,
+      "cache_write_unspecified": 0,
+      "output": 500
+    },
+    "fees": [
+      {
+        "fee_id": "web_search",
+        "count": 3
+      }
+    ]
+  },
+  "expected": {
+    "priced": true,
+    "rounding": "half_up",
+    "classes": {
+      "uncached_input": {
+        "tokens": 1000,
+        "rate_usd_per_mtok": "4",
+        "cost_usd": "0.004"
+      },
+      "output": {
+        "tokens": 500,
+        "rate_usd_per_mtok": "20",
+        "cost_usd": "0.01"
+      }
+    },
+    "fees": [
+      {
+        "fee_id": "web_search",
+        "count": 3,
+        "unit_price_usd": "0.01",
+        "cost_usd": "0.03"
+      }
+    ],
+    "total_usd": "0.044",
+    "total_nanodollars": 44000000
+  }
+}

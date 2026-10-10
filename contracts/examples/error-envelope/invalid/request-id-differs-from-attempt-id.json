@@ -1,0 +1,22 @@
+{
+  "protocol": "anthropic_messages",
+  "denial": "budget_policy_missing",
+  "code": "purser_budget_policy_missing",
+  "status": 403,
+  "headers": {
+    "content-type": "application/json",
+    "purser-attempt-id": "9c3e4f5a-6b7c-4d8e-8f9a-1b2c3d4e5f6a",
+    "request-id": "9c3e4f5a-6b7c-4d8e-8f9a-1b2c3d4e5f6a"
+  },
+  "body": {
+    "type": "error",
+    "error": {
+      "type": "permission_error",
+      "message": "Purser has no budget policy for this organization, so it admits no requests. An org owner or a Purser operator must set one.",
+      "details": {
+        "error_code": "purser_budget_policy_missing"
+      }
+    },
+    "request_id": "be5a6b7c-8d9e-4f0a-8b1c-3d4e5f6a7b8c"
+  }
+}

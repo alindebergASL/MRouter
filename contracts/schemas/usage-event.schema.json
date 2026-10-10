@@ -1,0 +1,1075 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:purser:contracts:usage-event:0.1.0",
+  "title": "Usage event",
+  "description": "One usage record per upstream attempt that was dispatched, including relay retries, failures, and unknown outcomes (architecture 6.1, M1). A released attempt sent no byte upstream, so it has no usage record. The record is keyed by attempt_id and updated in place with a higher revision when an unknown attempt settles or reconciliation fills in billed cost. Token counts and costs carry an evidence tier (6.5); an unavailable value is null with a reason, never 0. The record holds identifiers, counts, and money only: no field can carry prompt or response text (C2).",
+  "$comment": "Cross-field rules, checked on examples by the validator: settled_at and recorded_at are not before dispatched_at; ttfb_ms is not above duration_ms; retry_of_attempt_id differs from attempt_id; fees has at most one entry per fee_id; when the provider's cache-write split (5m + 1h, plus unspecified) disagrees with cache_write_total, flags contains usage_inconsistent (6.3).",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "attempt_id",
+    "revision",
+    "recorded_at",
+    "state",
+    "dispatched_at",
+    "settled_at",
+    "identity",
+    "correlation",
+    "routing",
+    "dimensions",
+    "tokens",
+    "fees",
+    "computed_cost",
+    "provider_billed_cost",
+    "timing",
+    "flags"
+  ],
+  "properties": {
+    "schema_version": {"$ref": "urn:purser:contracts:common:0.1.0#/$defs/schema_version"},
+    "attempt_id": {"$ref": "urn:purser:contracts:common:0.1.0#/$defs/uuid"},
+    "revision": {
+      "description": "1 when first written; incremented on every update of the same attempt's record.",
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 2147483647
+    },
+    "recorded_at": {"$ref": "urn:purser:contracts:common:0.1.0#/$defs/rfc3339_utc"},
+    "state": {
+      "description": "The attempt's state (attempt schema) when this revision was written. Only states reached after dispatch have usage records.",
+      "enum": ["settled", "unknown"]
+    },
+    "dispatched_at": {"$ref": "urn:purser:contracts:common:0.1.0#/$defs/rfc3339_utc"},
+    "settled_at": {
+      "description": "When the attempt settled; null while it is unknown.",
+      "oneOf": [{"$ref": "urn:purser:contracts:common:0.1.0#/$defs/rfc3339_utc"}, {"type": "null"}]
+    },
+    "identity": {"$ref": "#/$defs/identity"},
+    "correlation": {"$ref": "#/$defs/correlation"},
+    "routing": {"$ref": "#/$defs/routing"},
+    "dimensions": {"$ref": "#/$defs/dimensions"},
+    "tokens": {"$ref": "#/$defs/tokens"},
+    "fees": {
+      "description": "Per-use fee counts (architecture 6.3), such as web searches. Empty when the attempt used none.",
+      "type": "array",
+      "maxItems": 16,
+      "items": {"$ref": "#/$defs/fee"}
+    },
+    "computed_cost": {"$ref": "#/$defs/computed_cost"},
+    "provider_billed_cost": {"$ref": "#/$defs/provider_billed_cost"},
+    "timing": {"$ref": "#/$defs/timing"},
+    "flags": {
+      "description": "usage_inconsistent: the provider's usage contradicts itself, such as a cache-write split that does not sum to its total (6.3). ceiling_overrun: computed cost exceeded the reserved ceiling (7.6).",
+      "type": "array",
+      "uniqueItems": true,
+      "maxItems": 2,
+      "items": {"enum": ["usage_inconsistent", "ceiling_overrun"]}
+    }
+  },
+  "additionalProperties": false,
+  "allOf": [
+    {
+      "$comment": "A settled attempt has a settlement time; an unknown one does not.",
+      "if": {"properties": {"state": {"const": "settled"}}},
+      "then": {"properties": {"settled_at": {"$ref": "urn:purser:contracts:common:0.1.0#/$defs/rfc3339_utc"}}},
+      "else": {"properties": {"settled_at": {"type": "null"}}}
+    },
+    {
+      "$comment": "A ceiling charge settles an unknown attempt (7.5), so it appears only on settled records.",
+      "if": {"properties": {"computed_cost": {"properties": {"basis": {"const": "ceiling_charge"}}}}},
+      "then": {"properties": {"state": {"const": "settled"}}}
+    },
+    {
+      "$comment": "Cloud-originated clients (Cursor) authenticate with a virtual key and have no device (4). Everything else comes from an enrolled device.",
+      "if": {"properties": {"routing": {"properties": {"data_path": {"const": "public_listener"}}}}},
+      "then": {
+        "properties": {
+          "identity": {
+            "properties": {
+              "device_id": {"type": "null"},
+              "virtual_key_id": {"$ref": "urn:purser:contracts:common:0.1.0#/$defs/id"}
+            }
+          }
+        }
+      },
+      "else": {
+        "properties": {
+          "identity": {
+            "properties": {
+              "device_id": {"$ref": "urn:purser:contracts:common:0.1.0#/$defs/id"},
+              "virtual_key_id": {"type": "null"}
+            }
+          }
+        }
+      }
+    },
+    {
+      "$comment": "Local models are reached by the sidecar directly, and only there.",
+      "if": {"properties": {"routing": {"properties": {"provider": {"const": "local"}}}}},
+      "then": {"properties": {"routing": {"properties": {"data_path": {"const": "local"}}}}},
+      "else": {
+        "properties": {"routing": {"properties": {"data_path": {"enum": ["relay", "public_listener"]}}}}
+      }
+    },
+    {
+      "$comment": "Local models are metered, never billed: their cost is unavailable with reason not_billed, not a measured 0 (open question 4 in the PR). Only they use not_billed.",
+      "if": {
+        "properties": {
+          "routing": {"properties": {"data_path": {"const": "local"}}, "required": ["data_path"]}
+        },
+        "required": ["routing"]
+      },
+      "then": {
+        "properties": {
+          "computed_cost": {
+            "properties": {"unavailable_reason": {"const": "not_billed"}},
+            "required": ["unavailable_reason"]
+          },
+          "provider_billed_cost": {
+            "properties": {"unavailable_reason": {"const": "not_billed"}},
+            "required": ["unavailable_reason"]
+          }
+        }
+      },
+      "else": {
+        "properties": {
+          "computed_cost": {"properties": {"unavailable_reason": {"enum": ["unpriced", "usage_unavailable"]}}},
+          "provider_billed_cost": {
+            "properties": {"unavailable_reason": {"enum": ["pending_reconciliation", "not_reported"]}}
+          }
+        }
+      }
+    },
+    {
+      "$comment": "A relay retry names the attempt it retries (7.2); nothing else does.",
+      "if": {
+        "properties": {
+          "identity": {"properties": {"initiator": {"const": "relay_retry"}}, "required": ["initiator"]}
+        },
+        "required": ["identity"]
+      },
+      "then": {
+        "properties": {
+          "correlation": {
+            "properties": {"retry_of_attempt_id": {"$ref": "urn:purser:contracts:common:0.1.0#/$defs/uuid"}}
+          }
+        }
+      },
+      "else": {"properties": {"correlation": {"properties": {"retry_of_attempt_id": {"type": "null"}}}}}
+    },
+    {
+      "$comment": "While an attempt is unknown no exact usage has been found (7.5), so it has no computed or billed cost; its ceiling stays reserved.",
+      "if": {"properties": {"state": {"const": "unknown"}}, "required": ["state"]},
+      "then": {
+        "properties": {
+          "computed_cost": {"properties": {"evidence": {"const": "unavailable"}}},
+          "provider_billed_cost": {"properties": {"evidence": {"const": "unavailable"}}}
+        }
+      }
+    },
+    {
+      "$comment": "A settled attempt has its usage or its ceiling charge (7.5), so its cost is never missing for lack of usage.",
+      "if": {"properties": {"state": {"const": "settled"}}, "required": ["state"]},
+      "then": {
+        "properties": {
+          "computed_cost": {
+            "not": {
+              "properties": {"unavailable_reason": {"const": "usage_unavailable"}},
+              "required": ["unavailable_reason"]
+            }
+          }
+        }
+      }
+    },
+    {
+      "$comment": "Unpriced, not guessed (6.3): an unrecognized speed, service tier, or geography makes the attempt unpriced, never a computed amount.",
+      "if": {
+        "properties": {
+          "dimensions": {
+            "anyOf": [
+              {
+                "properties": {
+                  "speed": {
+                    "properties": {"unavailable_reason": {"const": "unrecognized_value"}},
+                    "required": ["unavailable_reason"]
+                  }
+                },
+                "required": ["speed"]
+              },
+              {
+                "properties": {
+                  "service_tier": {
+                    "properties": {"unavailable_reason": {"const": "unrecognized_value"}},
+                    "required": ["unavailable_reason"]
+                  }
+                },
+                "required": ["service_tier"]
+              },
+              {
+                "properties": {
+                  "inference_geo": {
+                    "properties": {"unavailable_reason": {"const": "unrecognized_value"}},
+                    "required": ["unavailable_reason"]
+                  }
+                },
+                "required": ["inference_geo"]
+              }
+            ]
+          }
+        },
+        "required": ["dimensions"]
+      },
+      "then": {
+        "properties": {
+          "computed_cost": {
+            "properties": {"unavailable_reason": {"const": "unpriced"}},
+            "required": ["unavailable_reason"]
+          }
+        }
+      }
+    },
+    {
+      "$comment": "A cost computed from usage never treats an unavailable count as zero: every priced class it used is known, or absent for this provider (not_applicable), and every fee count is known.",
+      "if": {
+        "properties": {"computed_cost": {"properties": {"basis": {"const": "usage"}}, "required": ["basis"]}},
+        "required": ["computed_cost"]
+      },
+      "then": {
+        "properties": {
+          "tokens": {
+            "properties": {
+              "uncached_input": {"properties": {"unavailable_reason": {"const": "not_applicable"}}},
+              "cache_read": {"properties": {"unavailable_reason": {"const": "not_applicable"}}},
+              "cache_write_5m": {"properties": {"unavailable_reason": {"const": "not_applicable"}}},
+              "cache_write_1h": {"properties": {"unavailable_reason": {"const": "not_applicable"}}},
+              "cache_write_unspecified": {"properties": {"unavailable_reason": {"const": "not_applicable"}}},
+              "output": {"properties": {"unavailable_reason": {"const": "not_applicable"}}}
+            }
+          },
+          "fees": {
+            "items": {
+              "properties": {"count": {"properties": {"evidence": {"not": {"const": "unavailable"}}}}}
+            }
+          }
+        }
+      }
+    },
+    {
+      "$comment": "No section 6.5 tier fits a ceiling charge exactly (open question 2); it is recorded as inferred, never measured.",
+      "if": {
+        "properties": {
+          "computed_cost": {"properties": {"basis": {"const": "ceiling_charge"}}, "required": ["basis"]}
+        },
+        "required": ["computed_cost"]
+      },
+      "then": {"properties": {"computed_cost": {"properties": {"evidence": {"const": "inferred"}}}}}
+    },
+    {
+      "$comment": "A ceiling overrun (7.6) is computed cost above the ceiling, so it needs a cost computed from usage on a settled attempt.",
+      "if": {"properties": {"flags": {"contains": {"const": "ceiling_overrun"}}}, "required": ["flags"]},
+      "then": {
+        "properties": {
+          "state": {"const": "settled"},
+          "computed_cost": {"properties": {"basis": {"const": "usage"}}, "required": ["basis"]}
+        }
+      }
+    },
+    {
+      "$comment": "M4: a relay or public-listener record whose provider reported usage (any measured priced count) carries the keyed hash that deduplicates trace events against it, whether or not the attempt could be priced.",
+      "if": {
+        "properties": {
+          "routing": {
+            "properties": {"data_path": {"enum": ["relay", "public_listener"]}},
+            "required": ["data_path"]
+          },
+          "tokens": {
+            "anyOf": [
+              {
+                "properties": {
+                  "uncached_input": {
+                    "properties": {"evidence": {"const": "measured"}},
+                    "required": ["evidence"]
+                  }
+                },
+                "required": ["uncached_input"]
+              },
+              {
+                "properties": {
+                  "cache_read": {"properties": {"evidence": {"const": "measured"}}, "required": ["evidence"]}
+                },
+                "required": ["cache_read"]
+              },
+              {
+                "properties": {
+                  "cache_write_5m": {
+                    "properties": {"evidence": {"const": "measured"}},
+                    "required": ["evidence"]
+                  }
+                },
+                "required": ["cache_write_5m"]
+              },
+              {
+                "properties": {
+                  "cache_write_1h": {
+                    "properties": {"evidence": {"const": "measured"}},
+                    "required": ["evidence"]
+                  }
+                },
+                "required": ["cache_write_1h"]
+              },
+              {
+                "properties": {
+                  "cache_write_unspecified": {
+                    "properties": {"evidence": {"const": "measured"}},
+                    "required": ["evidence"]
+                  }
+                },
+                "required": ["cache_write_unspecified"]
+              },
+              {
+                "properties": {
+                  "output": {"properties": {"evidence": {"const": "measured"}}, "required": ["evidence"]}
+                },
+                "required": ["output"]
+              }
+            ]
+          },
+          "computed_cost": {
+            "not": {"properties": {"basis": {"const": "upstream_error"}}, "required": ["basis"]}
+          }
+        },
+        "required": ["routing", "tokens", "computed_cost"]
+      },
+      "then": {
+        "properties": {
+          "correlation": {
+            "properties": {
+              "provider_message_id_hmac": {"properties": {"evidence": {"not": {"const": "unavailable"}}}}
+            }
+          }
+        }
+      }
+    },
+    {
+      "$comment": "Each provider has its own settings (6.2, 6.3). Anthropic: speed and inference_geo; its service_tier is standard, priority, or batch.",
+      "if": {
+        "properties": {
+          "routing": {"properties": {"provider": {"const": "anthropic"}}, "required": ["provider"]}
+        },
+        "required": ["routing"]
+      },
+      "then": {
+        "properties": {
+          "dimensions": {
+            "properties": {
+              "speed": {"properties": {"value": {"enum": ["standard", "fast", null]}}},
+              "service_tier": {"properties": {"value": {"enum": ["standard", "priority", "batch", null]}}},
+              "inference_geo": {"properties": {"value": {"enum": ["global", "us", null]}}}
+            }
+          }
+        }
+      }
+    },
+    {
+      "$comment": "OpenAI has no speed parameter; its service tiers are auto, default, flex, scale, priority, fast, and ultrafast.",
+      "if": {
+        "properties": {"routing": {"properties": {"provider": {"const": "openai"}}, "required": ["provider"]}},
+        "required": ["routing"]
+      },
+      "then": {
+        "properties": {
+          "dimensions": {
+            "properties": {
+              "speed": {
+                "properties": {"value": {"type": "null"}, "unavailable_reason": {"const": "not_applicable"}}
+              },
+              "service_tier": {
+                "properties": {
+                  "value": {
+                    "enum": ["auto", "default", "flex", "scale", "priority", "fast", "ultrafast", null]
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "$comment": "Local models have no priced settings.",
+      "if": {
+        "properties": {"routing": {"properties": {"provider": {"const": "local"}}, "required": ["provider"]}},
+        "required": ["routing"]
+      },
+      "then": {
+        "properties": {
+          "dimensions": {
+            "properties": {
+              "speed": {
+                "properties": {"value": {"type": "null"}, "unavailable_reason": {"const": "not_applicable"}}
+              },
+              "service_tier": {
+                "properties": {"value": {"type": "null"}, "unavailable_reason": {"const": "not_applicable"}}
+              },
+              "inference_geo": {
+                "properties": {"value": {"type": "null"}, "unavailable_reason": {"const": "not_applicable"}}
+              },
+              "long_context_applied": {
+                "properties": {"value": {"type": "null"}, "unavailable_reason": {"const": "not_applicable"}}
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "$comment": "An error before any output began is charged 0 and inferred from the error status, only on a settled attempt, and only if no output was produced: every priced count, reasoning, the cache-write total, and every fee count is 0 or absent (error_response). Billed partial output is never recorded as 0.",
+      "if": {
+        "properties": {
+          "computed_cost": {"properties": {"basis": {"const": "upstream_error"}}, "required": ["basis"]}
+        },
+        "required": ["computed_cost"]
+      },
+      "then": {
+        "properties": {
+          "state": {"const": "settled"},
+          "computed_cost": {"properties": {"nanodollars": {"const": 0}, "evidence": {"const": "inferred"}}},
+          "tokens": {
+            "properties": {
+              "uncached_input": {
+                "anyOf": [
+                  {"properties": {"value": {"const": 0}}, "required": ["value"]},
+                  {
+                    "properties": {"unavailable_reason": {"enum": ["error_response", "not_applicable"]}},
+                    "required": ["unavailable_reason"]
+                  }
+                ]
+              },
+              "cache_read": {
+                "anyOf": [
+                  {"properties": {"value": {"const": 0}}, "required": ["value"]},
+                  {
+                    "properties": {"unavailable_reason": {"enum": ["error_response", "not_applicable"]}},
+                    "required": ["unavailable_reason"]
+                  }
+                ]
+              },
+              "cache_write_5m": {
+                "anyOf": [
+                  {"properties": {"value": {"const": 0}}, "required": ["value"]},
+                  {
+                    "properties": {"unavailable_reason": {"enum": ["error_response", "not_applicable"]}},
+                    "required": ["unavailable_reason"]
+                  }
+                ]
+              },
+              "cache_write_1h": {
+                "anyOf": [
+                  {"properties": {"value": {"const": 0}}, "required": ["value"]},
+                  {
+                    "properties": {"unavailable_reason": {"enum": ["error_response", "not_applicable"]}},
+                    "required": ["unavailable_reason"]
+                  }
+                ]
+              },
+              "cache_write_unspecified": {
+                "anyOf": [
+                  {"properties": {"value": {"const": 0}}, "required": ["value"]},
+                  {
+                    "properties": {"unavailable_reason": {"enum": ["error_response", "not_applicable"]}},
+                    "required": ["unavailable_reason"]
+                  }
+                ]
+              },
+              "output": {
+                "anyOf": [
+                  {"properties": {"value": {"const": 0}}, "required": ["value"]},
+                  {
+                    "properties": {"unavailable_reason": {"enum": ["error_response", "not_applicable"]}},
+                    "required": ["unavailable_reason"]
+                  }
+                ]
+              },
+              "reasoning": {
+                "anyOf": [
+                  {"properties": {"value": {"const": 0}}, "required": ["value"]},
+                  {
+                    "properties": {"unavailable_reason": {"enum": ["error_response", "not_applicable"]}},
+                    "required": ["unavailable_reason"]
+                  }
+                ]
+              },
+              "cache_write_total": {
+                "anyOf": [
+                  {"properties": {"value": {"const": 0}}, "required": ["value"]},
+                  {
+                    "properties": {"unavailable_reason": {"enum": ["error_response", "not_applicable"]}},
+                    "required": ["unavailable_reason"]
+                  }
+                ]
+              }
+            }
+          },
+          "fees": {
+            "items": {
+              "properties": {
+                "count": {
+                  "anyOf": [
+                    {"properties": {"value": {"const": 0}}, "required": ["value"]},
+                    {
+                      "properties": {"unavailable_reason": {"enum": ["error_response", "not_applicable"]}},
+                      "required": ["unavailable_reason"]
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "$comment": "A ceiling charge means no exact usage was found (7.5): some priced count or fee count is missing.",
+      "if": {
+        "properties": {
+          "computed_cost": {"properties": {"basis": {"const": "ceiling_charge"}}, "required": ["basis"]}
+        },
+        "required": ["computed_cost"]
+      },
+      "then": {
+        "anyOf": [
+          {
+            "properties": {
+              "tokens": {
+                "anyOf": [
+                  {
+                    "properties": {
+                      "uncached_input": {
+                        "properties": {
+                          "unavailable_reason": {
+                            "enum": ["not_reported", "stream_interrupted", "no_response"]
+                          }
+                        },
+                        "required": ["unavailable_reason"]
+                      }
+                    },
+                    "required": ["uncached_input"]
+                  },
+                  {
+                    "properties": {
+                      "cache_read": {
+                        "properties": {
+                          "unavailable_reason": {
+                            "enum": ["not_reported", "stream_interrupted", "no_response"]
+                          }
+                        },
+                        "required": ["unavailable_reason"]
+                      }
+                    },
+                    "required": ["cache_read"]
+                  },
+                  {
+                    "properties": {
+                      "cache_write_5m": {
+                        "properties": {
+                          "unavailable_reason": {
+                            "enum": ["not_reported", "stream_interrupted", "no_response"]
+                          }
+                        },
+                        "required": ["unavailable_reason"]
+                      }
+                    },
+                    "required": ["cache_write_5m"]
+                  },
+                  {
+                    "properties": {
+                      "cache_write_1h": {
+                        "properties": {
+                          "unavailable_reason": {
+                            "enum": ["not_reported", "stream_interrupted", "no_response"]
+                          }
+                        },
+                        "required": ["unavailable_reason"]
+                      }
+                    },
+                    "required": ["cache_write_1h"]
+                  },
+                  {
+                    "properties": {
+                      "cache_write_unspecified": {
+                        "properties": {
+                          "unavailable_reason": {
+                            "enum": ["not_reported", "stream_interrupted", "no_response"]
+                          }
+                        },
+                        "required": ["unavailable_reason"]
+                      }
+                    },
+                    "required": ["cache_write_unspecified"]
+                  },
+                  {
+                    "properties": {
+                      "output": {
+                        "properties": {
+                          "unavailable_reason": {
+                            "enum": ["not_reported", "stream_interrupted", "no_response"]
+                          }
+                        },
+                        "required": ["unavailable_reason"]
+                      }
+                    },
+                    "required": ["output"]
+                  }
+                ]
+              }
+            }
+          },
+          {
+            "properties": {
+              "fees": {
+                "contains": {
+                  "properties": {
+                    "count": {
+                      "properties": {
+                        "unavailable_reason": {"enum": ["not_reported", "stream_interrupted", "no_response"]}
+                      },
+                      "required": ["unavailable_reason"]
+                    }
+                  }
+                }
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "$comment": "Anthropic reports input, cache reads, and 5-minute and 1-hour cache writes separately (6.2), so none of those is ever not_applicable, and its writes always carry a TTL, so cache_write_unspecified never holds a count.",
+      "if": {
+        "properties": {
+          "routing": {"properties": {"provider": {"const": "anthropic"}}, "required": ["provider"]}
+        },
+        "required": ["routing"]
+      },
+      "then": {
+        "properties": {
+          "tokens": {
+            "properties": {
+              "uncached_input": {
+                "not": {
+                  "properties": {"unavailable_reason": {"const": "not_applicable"}},
+                  "required": ["unavailable_reason"]
+                }
+              },
+              "cache_read": {
+                "not": {
+                  "properties": {"unavailable_reason": {"const": "not_applicable"}},
+                  "required": ["unavailable_reason"]
+                }
+              },
+              "cache_write_5m": {
+                "not": {
+                  "properties": {"unavailable_reason": {"const": "not_applicable"}},
+                  "required": ["unavailable_reason"]
+                }
+              },
+              "cache_write_1h": {
+                "not": {
+                  "properties": {"unavailable_reason": {"const": "not_applicable"}},
+                  "required": ["unavailable_reason"]
+                }
+              },
+              "output": {
+                "not": {
+                  "properties": {"unavailable_reason": {"const": "not_applicable"}},
+                  "required": ["unavailable_reason"]
+                }
+              },
+              "cache_write_unspecified": {
+                "properties": {"value": {"type": "null"}, "unavailable_reason": {"const": "not_applicable"}},
+                "required": ["unavailable_reason"]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "$comment": "OpenAI cache writes carry no TTL (6.2): the 5-minute and 1-hour classes never apply, and the others always do.",
+      "if": {
+        "properties": {"routing": {"properties": {"provider": {"const": "openai"}}, "required": ["provider"]}},
+        "required": ["routing"]
+      },
+      "then": {
+        "properties": {
+          "tokens": {
+            "properties": {
+              "cache_write_5m": {
+                "properties": {"value": {"type": "null"}, "unavailable_reason": {"const": "not_applicable"}}
+              },
+              "cache_write_1h": {
+                "properties": {"value": {"type": "null"}, "unavailable_reason": {"const": "not_applicable"}}
+              },
+              "uncached_input": {
+                "not": {
+                  "properties": {"unavailable_reason": {"const": "not_applicable"}},
+                  "required": ["unavailable_reason"]
+                }
+              },
+              "cache_read": {
+                "not": {
+                  "properties": {"unavailable_reason": {"const": "not_applicable"}},
+                  "required": ["unavailable_reason"]
+                }
+              },
+              "cache_write_unspecified": {
+                "not": {
+                  "properties": {"unavailable_reason": {"const": "not_applicable"}},
+                  "required": ["unavailable_reason"]
+                }
+              },
+              "output": {
+                "not": {
+                  "properties": {"unavailable_reason": {"const": "not_applicable"}},
+                  "required": ["unavailable_reason"]
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "relay_evidence": {
+      "description": "Tiers a relay record can carry (6.5 Source column). Estimated values come only from trace readers and never reach a usage event.",
+      "enum": ["reconciled", "measured", "inferred", "unavailable"]
+    },
+    "relay_count": {
+      "allOf": [{"$ref": "urn:purser:contracts:common:0.1.0#/$defs/evidenced_count"}],
+      "properties": {
+        "evidence": {"$ref": "#/$defs/relay_evidence"},
+        "unavailable_reason": {
+          "enum": ["not_reported", "not_applicable", "stream_interrupted", "no_response", "error_response"]
+        }
+      }
+    },
+    "relay_duration_ms": {
+      "allOf": [{"$ref": "urn:purser:contracts:common:0.1.0#/$defs/evidenced_duration_ms"}],
+      "properties": {
+        "evidence": {"$ref": "#/$defs/relay_evidence"},
+        "unavailable_reason": {"enum": ["not_reported", "stream_interrupted", "no_response"]}
+      }
+    },
+    "relay_id": {
+      "allOf": [{"$ref": "urn:purser:contracts:common:0.1.0#/$defs/evidenced_id"}],
+      "properties": {
+        "evidence": {"$ref": "#/$defs/relay_evidence"},
+        "unavailable_reason": {"enum": ["not_reported", "not_applicable"]}
+      }
+    },
+    "relay_hmac": {
+      "allOf": [{"$ref": "urn:purser:contracts:common:0.1.0#/$defs/evidenced_hmac"}],
+      "properties": {
+        "evidence": {"$ref": "#/$defs/relay_evidence"},
+        "unavailable_reason": {
+          "enum": ["not_reported", "not_applicable", "stream_interrupted", "no_response", "error_response"]
+        }
+      }
+    },
+    "identity": {
+      "description": "Who the attempt is attributed to (6.1). Exactly one of device_id and virtual_key_id is set (rule above).",
+      "type": "object",
+      "required": [
+        "org_id",
+        "workspace_id",
+        "team_id",
+        "user_id",
+        "device_id",
+        "virtual_key_id",
+        "harness",
+        "initiator"
+      ],
+      "properties": {
+        "org_id": {"$ref": "urn:purser:contracts:common:0.1.0#/$defs/id"},
+        "workspace_id": {"$ref": "urn:purser:contracts:common:0.1.0#/$defs/id"},
+        "team_id": {
+          "description": "Null when the user belongs to no team.",
+          "oneOf": [{"$ref": "urn:purser:contracts:common:0.1.0#/$defs/id"}, {"type": "null"}]
+        },
+        "user_id": {"$ref": "urn:purser:contracts:common:0.1.0#/$defs/id"},
+        "device_id": {"oneOf": [{"$ref": "urn:purser:contracts:common:0.1.0#/$defs/id"}, {"type": "null"}]},
+        "virtual_key_id": {
+          "oneOf": [{"$ref": "urn:purser:contracts:common:0.1.0#/$defs/id"}, {"type": "null"}]
+        },
+        "harness": {
+          "description": "The harness whose request this attempt serves, including relay retries and decision-model calls made on its behalf. kiro and pi have trace readers only and never appear here.",
+          "$ref": "urn:purser:contracts:common:0.1.0#/$defs/harness",
+          "not": {"enum": ["kiro", "pi"]}
+        },
+        "initiator": {
+          "description": "harness: the client's own request. relay_retry: a relay-initiated retry, its own attempt with its own reservation (7.2). decision_model: a routing decision-model call, metered like any other attempt (8.5 change 4).",
+          "enum": ["harness", "relay_retry", "decision_model"]
+        }
+      },
+      "additionalProperties": false
+    },
+    "correlation": {
+      "description": "Correlation IDs (6.1). Session and prompt IDs are unavailable when the harness does not send them. provider_message_id_hmac is the keyed hash that deduplicates trace events against relay records (6.6, M4).",
+      "type": "object",
+      "required": [
+        "session_id",
+        "prompt_id",
+        "provider_request_id",
+        "provider_message_id_hmac",
+        "retry_of_attempt_id"
+      ],
+      "properties": {
+        "session_id": {"$ref": "#/$defs/relay_id"},
+        "prompt_id": {"$ref": "#/$defs/relay_id"},
+        "provider_request_id": {
+          "description": "The provider's request ID, used to match provider usage data during reconciliation (7.5).",
+          "$ref": "#/$defs/relay_id"
+        },
+        "provider_message_id_hmac": {"$ref": "#/$defs/relay_hmac"},
+        "retry_of_attempt_id": {
+          "description": "The attempt this one retries; null when it is not a retry.",
+          "oneOf": [{"$ref": "urn:purser:contracts:common:0.1.0#/$defs/uuid"}, {"type": "null"}]
+        }
+      },
+      "additionalProperties": false
+    },
+    "routing": {
+      "description": "Where the attempt went and which price book priced it (6.1, P1).",
+      "type": "object",
+      "required": [
+        "provider",
+        "model",
+        "route_id",
+        "route_type",
+        "data_path",
+        "price_book_version",
+        "shadow_decision_id"
+      ],
+      "properties": {
+        "provider": {"$ref": "urn:purser:contracts:common:0.1.0#/$defs/provider"},
+        "model": {"$ref": "urn:purser:contracts:common:0.1.0#/$defs/model_id"},
+        "route_id": {"$ref": "urn:purser:contracts:common:0.1.0#/$defs/id"},
+        "route_type": {"$ref": "urn:purser:contracts:common:0.1.0#/$defs/route_type"},
+        "data_path": {
+          "description": "relay: sidecar to relay over mTLS. public_listener: the relay's public HTTPS listener (Cursor). local: a local model through the sidecar.",
+          "enum": ["relay", "public_listener", "local"]
+        },
+        "price_book_version": {
+          "description": "The price-book version effective when the reservation committed (P1).",
+          "$ref": "urn:purser:contracts:common:0.1.0#/$defs/id"
+        },
+        "shadow_decision_id": {
+          "description": "The shadow routing decision logged for this attempt (8.2, 11); null when shadow routing is off.",
+          "oneOf": [{"$ref": "urn:purser:contracts:common:0.1.0#/$defs/uuid"}, {"type": "null"}]
+        }
+      },
+      "additionalProperties": false
+    },
+    "null_needs_reason": {
+      "if": {"properties": {"value": {"type": "null"}}, "required": ["value"]},
+      "then": {"required": ["unavailable_reason"]},
+      "else": {"not": {"required": ["unavailable_reason"]}}
+    },
+    "dimension_reason": {
+      "description": "not_applicable: the provider or path has no such setting. not_reported: the response did not say. unrecognized_value: a value outside the enumerated set; the raw string is never stored (C2), and the attempt is unpriced (6.3).",
+      "enum": ["not_applicable", "not_reported", "unrecognized_value"]
+    },
+    "dimensions": {
+      "description": "Request-level settings that change the price (6.2, 6.3), as billed. Values are enumerated so a client-supplied string is never persisted.",
+      "type": "object",
+      "required": ["speed", "service_tier", "inference_geo", "long_context_applied"],
+      "properties": {
+        "speed": {
+          "description": "Anthropic speed (fast mode).",
+          "type": "object",
+          "required": ["value"],
+          "properties": {
+            "value": {"enum": ["standard", "fast", null]},
+            "unavailable_reason": {"$ref": "#/$defs/dimension_reason"}
+          },
+          "additionalProperties": false,
+          "allOf": [{"$ref": "#/$defs/null_needs_reason"}]
+        },
+        "service_tier": {
+          "description": "Service tier as the provider reports it. OpenAI: auto, default, flex, scale, priority, fast, ultrafast. Anthropic: standard, priority, batch.",
+          "type": "object",
+          "required": ["value"],
+          "properties": {
+            "value": {
+              "enum": [
+                "auto",
+                "default",
+                "flex",
+                "scale",
+                "priority",
+                "fast",
+                "ultrafast",
+                "standard",
+                "batch",
+                null
+              ]
+            },
+            "unavailable_reason": {"$ref": "#/$defs/dimension_reason"}
+          },
+          "additionalProperties": false,
+          "allOf": [{"$ref": "#/$defs/null_needs_reason"}]
+        },
+        "inference_geo": {
+          "description": "Data-residency geography: Anthropic inference_geo, or the OpenAI residency region of the route.",
+          "type": "object",
+          "required": ["value"],
+          "properties": {
+            "value": {"enum": ["global", "us", "eu", null]},
+            "unavailable_reason": {"$ref": "#/$defs/dimension_reason"}
+          },
+          "additionalProperties": false,
+          "allOf": [{"$ref": "#/$defs/null_needs_reason"}]
+        },
+        "long_context_applied": {
+          "description": "Whether the long-context tier priced the whole attempt (6.3). Null with a reason when it cannot be known, for example when input usage was lost.",
+          "type": "object",
+          "required": ["value"],
+          "properties": {
+            "value": {"enum": [true, false, null]},
+            "unavailable_reason": {"$ref": "#/$defs/dimension_reason"}
+          },
+          "additionalProperties": false,
+          "allOf": [{"$ref": "#/$defs/null_needs_reason"}]
+        }
+      },
+      "additionalProperties": false
+    },
+    "tokens": {
+      "description": "Token counts by class (6.1, 6.2). Priced classes: uncached_input, cache_read, cache_write_5m, cache_write_1h, cache_write_unspecified (writes whose provider reports no TTL: OpenAI; never Anthropic), output. Informational, never priced again: reasoning (already counted in output where the provider reports it) and cache_write_total (the provider's own total, such as Anthropic cache_creation_input_tokens, kept so an inconsistent split stays visible).",
+      "type": "object",
+      "required": [
+        "uncached_input",
+        "cache_read",
+        "cache_write_5m",
+        "cache_write_1h",
+        "cache_write_unspecified",
+        "output",
+        "reasoning",
+        "cache_write_total"
+      ],
+      "properties": {
+        "uncached_input": {"$ref": "#/$defs/relay_count"},
+        "cache_read": {"$ref": "#/$defs/relay_count"},
+        "cache_write_5m": {"$ref": "#/$defs/relay_count"},
+        "cache_write_1h": {"$ref": "#/$defs/relay_count"},
+        "cache_write_unspecified": {"$ref": "#/$defs/relay_count"},
+        "output": {"$ref": "#/$defs/relay_count"},
+        "reasoning": {"$ref": "#/$defs/relay_count"},
+        "cache_write_total": {"$ref": "#/$defs/relay_count"}
+      },
+      "additionalProperties": false
+    },
+    "fee": {
+      "type": "object",
+      "required": ["fee_id", "count"],
+      "properties": {
+        "fee_id": {
+          "description": "A per_use_fee fee_id from the price book, such as web_search.",
+          "$ref": "urn:purser:contracts:common:0.1.0#/$defs/id"
+        },
+        "count": {"$ref": "#/$defs/relay_count"}
+      },
+      "additionalProperties": false
+    },
+    "unpriced_dimension": {
+      "description": "Which part of the price book was missing (6.3). Names only; never the request's value.",
+      "enum": [
+        "model",
+        "speed",
+        "service_tier",
+        "inference_geo",
+        "long_context",
+        "token_class",
+        "fee",
+        "cache_ttl"
+      ]
+    },
+    "computed_cost": {
+      "description": "Cost computed by the relay from the price book, rounded once per attempt to integer nano-dollars (6.4). basis usage: priced from token counts and fees. basis upstream_error: the provider answered with an error before any output began, charged 0 (7.5; an error after output began settles from partial stream usage or by ceiling charge instead). basis ceiling_charge: an unknown attempt with no exact usage found within the reconciliation window, charged its full ceiling (7.5). Null with a reason when it cannot be computed: unpriced (with unpriced_dimensions), usage_unavailable, or not_billed.",
+      "type": "object",
+      "required": ["nanodollars", "evidence", "basis"],
+      "properties": {
+        "nanodollars": {
+          "oneOf": [{"$ref": "urn:purser:contracts:common:0.1.0#/$defs/nanodollars"}, {"type": "null"}]
+        },
+        "evidence": {
+          "description": "measured or inferred when computed from usage; inferred for a ceiling charge; unavailable when null. How cost evidence derives from token evidence, and the tier of a ceiling charge, are open questions in the PR.",
+          "enum": ["measured", "inferred", "unavailable"]
+        },
+        "basis": {"enum": ["usage", "ceiling_charge", "upstream_error", null]},
+        "unavailable_reason": {"enum": ["unpriced", "usage_unavailable", "not_billed"]},
+        "unpriced_dimensions": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 8,
+          "uniqueItems": true,
+          "items": {"$ref": "#/$defs/unpriced_dimension"}
+        }
+      },
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "if": {"properties": {"evidence": {"const": "unavailable"}}, "required": ["evidence"]},
+          "then": {
+            "properties": {"nanodollars": {"type": "null"}, "basis": {"type": "null"}},
+            "required": ["unavailable_reason"]
+          },
+          "else": {
+            "properties": {
+              "nanodollars": {"$ref": "urn:purser:contracts:common:0.1.0#/$defs/nanodollars"},
+              "basis": {"enum": ["usage", "ceiling_charge", "upstream_error"]}
+            },
+            "not": {"anyOf": [{"required": ["unavailable_reason"]}, {"required": ["unpriced_dimensions"]}]}
+          }
+        },
+        {
+          "if": {
+            "properties": {"unavailable_reason": {"const": "unpriced"}},
+            "required": ["unavailable_reason"]
+          },
+          "then": {"required": ["unpriced_dimensions"]},
+          "else": {"not": {"required": ["unpriced_dimensions"]}}
+        }
+      ]
+    },
+    "provider_billed_cost": {
+      "description": "The provider's billed cost, filled in by monthly reconciliation (6.1, M3). Unavailable with pending_reconciliation until then.",
+      "type": "object",
+      "required": ["nanodollars", "evidence"],
+      "properties": {
+        "nanodollars": {
+          "oneOf": [{"$ref": "urn:purser:contracts:common:0.1.0#/$defs/nanodollars"}, {"type": "null"}]
+        },
+        "evidence": {"enum": ["reconciled", "unavailable"]},
+        "unavailable_reason": {"enum": ["pending_reconciliation", "not_reported", "not_billed"]}
+      },
+      "additionalProperties": false,
+      "if": {"properties": {"evidence": {"const": "unavailable"}}, "required": ["evidence"]},
+      "then": {"properties": {"nanodollars": {"type": "null"}}, "required": ["unavailable_reason"]},
+      "else": {
+        "properties": {"nanodollars": {"$ref": "urn:purser:contracts:common:0.1.0#/$defs/nanodollars"}},
+        "not": {"required": ["unavailable_reason"]}
+      }
+    },
+    "timing": {
+      "description": "Time to first byte and total duration (6.1). Unavailable with no_response when no byte came back.",
+      "type": "object",
+      "required": ["ttfb_ms", "duration_ms"],
+      "properties": {
+        "ttfb_ms": {"$ref": "#/$defs/relay_duration_ms"},
+        "duration_ms": {"$ref": "#/$defs/relay_duration_ms"}
+      },
+      "additionalProperties": false
+    }
+  }
+}

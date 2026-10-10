@@ -1,0 +1,22 @@
+{
+  "protocol": "anthropic_messages",
+  "denial": "request_unbounded",
+  "code": "purser_unbounded_uncapped_server_tool",
+  "status": 400,
+  "headers": {
+    "content-type": "application/json",
+    "purser-attempt-id": "e09b2f0d-6e1c-4b7a-8d5f-0c1b2a3f4e5d",
+    "request-id": "e09b2f0d-6e1c-4b7a-8d5f-0c1b2a3f4e5d"
+  },
+  "body": {
+    "type": "error",
+    "error": {
+      "type": "invalid_request_error",
+      "message": "Purser cannot bound the cost of this request: a server tool with a per-use fee needs a max_uses limit.",
+      "details": {
+        "error_code": "purser_unbounded_uncapped_server_tool"
+      }
+    },
+    "request_id": "e09b2f0d-6e1c-4b7a-8d5f-0c1b2a3f4e5d"
+  }
+}

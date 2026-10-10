@@ -1,0 +1,149 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:purser:contracts:trace-event:0.1.0",
+  "title": "Trace-reader event",
+  "description": "One usage event a sidecar trace reader derives from a transcript an agent wrote to disk (architecture 6.6). Content-free by schema (improvement 1, C4): token counts by class, model, timestamps, session ID, and a keyed hash of the provider message or response ID, each with its evidence tier (6.5). There is no free-text field: every string is an enum or a bounded identifier format. The keyed hash is HMAC-SHA256 under a per-org key, the same one the relay computes, so the control plane can mark an event covered by a relay record and not count it twice (improvement 2, M4); coverage is decided there and is not part of this event. A transcript format the reader does not recognize yields unavailable values with reason unrecognized_format, never zero (improvement 5).",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "event_id",
+    "org_id",
+    "user_id",
+    "device_id",
+    "harness",
+    "harness_version",
+    "reader",
+    "trace_format",
+    "session_id",
+    "model",
+    "occurred_at",
+    "observed_at",
+    "tokens",
+    "provider_message_id_hmac"
+  ],
+  "properties": {
+    "schema_version": {"$ref": "urn:purser:contracts:common:0.1.0#/$defs/schema_version"},
+    "event_id": {"$ref": "urn:purser:contracts:common:0.1.0#/$defs/uuid"},
+    "org_id": {"$ref": "urn:purser:contracts:common:0.1.0#/$defs/id"},
+    "user_id": {"$ref": "urn:purser:contracts:common:0.1.0#/$defs/id"},
+    "device_id": {"$ref": "urn:purser:contracts:common:0.1.0#/$defs/id"},
+    "harness": {"$ref": "urn:purser:contracts:common:0.1.0#/$defs/harness"},
+    "harness_version": {
+      "description": "The harness version that wrote the transcript, when the transcript records it. Readers are certified per harness version (improvement 5).",
+      "$ref": "#/$defs/trace_semver"
+    },
+    "reader": {
+      "type": "object",
+      "required": ["id", "version"],
+      "properties": {
+        "id": {"$ref": "urn:purser:contracts:common:0.1.0#/$defs/id"},
+        "version": {"$ref": "urn:purser:contracts:common:0.1.0#/$defs/semver"}
+      },
+      "additionalProperties": false
+    },
+    "trace_format": {
+      "description": "The transcript format the reader identified, such as claude-code.jsonl.v3; unrecognized when it did not recognize it.",
+      "$ref": "urn:purser:contracts:common:0.1.0#/$defs/id"
+    },
+    "session_id": {"$ref": "#/$defs/trace_id"},
+    "model": {"$ref": "#/$defs/trace_model_id"},
+    "occurred_at": {
+      "description": "When the model call happened, per the transcript.",
+      "$ref": "#/$defs/trace_timestamp"
+    },
+    "observed_at": {
+      "description": "When the reader emitted the event.",
+      "$ref": "urn:purser:contracts:common:0.1.0#/$defs/rfc3339_utc"
+    },
+    "tokens": {
+      "description": "Token counts by class, as in the usage event. Cursor output tokens, for example, are estimated from character counts, and its cache usage and hidden reasoning are unavailable locally (improvement 4).",
+      "type": "object",
+      "required": [
+        "uncached_input",
+        "cache_read",
+        "cache_write_5m",
+        "cache_write_1h",
+        "cache_write_unspecified",
+        "output",
+        "reasoning",
+        "cache_write_total"
+      ],
+      "properties": {
+        "uncached_input": {"$ref": "#/$defs/trace_count"},
+        "cache_read": {"$ref": "#/$defs/trace_count"},
+        "cache_write_5m": {"$ref": "#/$defs/trace_count"},
+        "cache_write_1h": {"$ref": "#/$defs/trace_count"},
+        "cache_write_unspecified": {"$ref": "#/$defs/trace_count"},
+        "output": {"$ref": "#/$defs/trace_count"},
+        "reasoning": {"$ref": "#/$defs/trace_count"},
+        "cache_write_total": {"$ref": "#/$defs/trace_count"}
+      },
+      "additionalProperties": false
+    },
+    "provider_message_id_hmac": {"$ref": "#/$defs/trace_hmac"}
+  },
+  "additionalProperties": false,
+  "allOf": [
+    {
+      "$comment": "An unrecognized format yields no values: the counts, model, session, time, harness version, and message hash are all unavailable for that reason (6.6, improvement 5).",
+      "if": {"properties": {"trace_format": {"const": "unrecognized"}}, "required": ["trace_format"]},
+      "then": {
+        "properties": {
+          "tokens": {
+            "properties": {
+              "uncached_input": {"$ref": "#/$defs/unrecognized"},
+              "cache_read": {"$ref": "#/$defs/unrecognized"},
+              "cache_write_5m": {"$ref": "#/$defs/unrecognized"},
+              "cache_write_1h": {"$ref": "#/$defs/unrecognized"},
+              "cache_write_unspecified": {"$ref": "#/$defs/unrecognized"},
+              "output": {"$ref": "#/$defs/unrecognized"},
+              "reasoning": {"$ref": "#/$defs/unrecognized"},
+              "cache_write_total": {"$ref": "#/$defs/unrecognized"}
+            }
+          },
+          "model": {"$ref": "#/$defs/unrecognized"},
+          "session_id": {"$ref": "#/$defs/unrecognized"},
+          "occurred_at": {"$ref": "#/$defs/unrecognized"},
+          "harness_version": {"$ref": "#/$defs/unrecognized"},
+          "provider_message_id_hmac": {"$ref": "#/$defs/unrecognized"}
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "trace_evidence": {
+      "description": "Tiers a trace reader can assign (6.5): reconciled and relay-measured values never come from a transcript. Whether a transcript's exact provider counts may be measured is open question 9 in the PR.",
+      "enum": ["measured", "inferred", "estimated", "unavailable"]
+    },
+    "unrecognized": {
+      "$comment": "Unavailable because the format was not recognized. With common evidence_rules, the reason implies a null value.",
+      "properties": {"unavailable_reason": {"const": "unrecognized_format"}},
+      "required": ["unavailable_reason"]
+    },
+    "trace_count": {
+      "allOf": [{"$ref": "urn:purser:contracts:common:0.1.0#/$defs/evidenced_count"}],
+      "properties": {"evidence": {"$ref": "#/$defs/trace_evidence"}}
+    },
+    "trace_id": {
+      "allOf": [{"$ref": "urn:purser:contracts:common:0.1.0#/$defs/evidenced_id"}],
+      "properties": {"evidence": {"$ref": "#/$defs/trace_evidence"}}
+    },
+    "trace_model_id": {
+      "allOf": [{"$ref": "urn:purser:contracts:common:0.1.0#/$defs/evidenced_model_id"}],
+      "properties": {"evidence": {"$ref": "#/$defs/trace_evidence"}}
+    },
+    "trace_semver": {
+      "allOf": [{"$ref": "urn:purser:contracts:common:0.1.0#/$defs/evidenced_semver"}],
+      "properties": {"evidence": {"$ref": "#/$defs/trace_evidence"}}
+    },
+    "trace_timestamp": {
+      "allOf": [{"$ref": "urn:purser:contracts:common:0.1.0#/$defs/evidenced_timestamp"}],
+      "properties": {"evidence": {"$ref": "#/$defs/trace_evidence"}}
+    },
+    "trace_hmac": {
+      "description": "Unavailable when the transcript records no provider message or response ID; such an event can never be matched to a relay record.",
+      "allOf": [{"$ref": "urn:purser:contracts:common:0.1.0#/$defs/evidenced_hmac"}],
+      "properties": {"evidence": {"$ref": "#/$defs/trace_evidence"}}
+    }
+  }
+}

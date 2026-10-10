@@ -1,0 +1,19 @@
+{
+  "protocol": "openai_responses",
+  "denial": "request_unbounded",
+  "code": "purser_unbounded_missing_output_cap",
+  "status": 400,
+  "headers": {
+    "content-type": "application/json",
+    "purser-attempt-id": "ce7f0d8b-4c9a-4f5e-8b3d-8a9f0e1d2c3b",
+    "x-request-id": "ce7f0d8b-4c9a-4f5e-8b3d-8a9f0e1d2c3b"
+  },
+  "body": {
+    "error": {
+      "message": "Purser cannot bound the cost of: refactor the payment module",
+      "type": "invalid_request_error",
+      "param": null,
+      "code": "purser_unbounded_missing_output_cap"
+    }
+  }
+}

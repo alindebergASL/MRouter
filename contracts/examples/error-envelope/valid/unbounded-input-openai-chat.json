@@ -1,0 +1,19 @@
+{
+  "protocol": "openai_chat_completions",
+  "denial": "request_unbounded",
+  "code": "purser_unbounded_input",
+  "status": 400,
+  "headers": {
+    "content-type": "application/json",
+    "purser-attempt-id": "13ce5c3a-9b4f-4e0d-9a8c-3f4e5d6c7b8a",
+    "x-request-id": "13ce5c3a-9b4f-4e0d-9a8c-3f4e5d6c7b8a"
+  },
+  "body": {
+    "error": {
+      "message": "Purser cannot bound the cost of this request: no upper bound on its input tokens is available.",
+      "type": "invalid_request_error",
+      "param": null,
+      "code": "purser_unbounded_input"
+    }
+  }
+}

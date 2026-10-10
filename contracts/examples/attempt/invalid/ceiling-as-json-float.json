@@ -1,0 +1,16 @@
+{
+  "schema_version": "0.1.0",
+  "attempt_id": "f84b5937-2a0c-45bd-b9fe-0c1d2b934953",
+  "org_id": "org_acme",
+  "state": "reserved",
+  "reserved_at": "2026-10-09T14:03:21.418Z",
+  "ceiling_nanodollars": 2.05,
+  "budget_window_ids": [
+    "win-org_acme-month-2026-10",
+    "win-team_platform-day-2026-10-09",
+    "win-user_017-day-2026-10-09"
+  ],
+  "price_book_version": "pb-2026-10-07",
+  "retry_of_attempt_id": null,
+  "transitions": []
+}

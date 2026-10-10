@@ -8,13 +8,13 @@ SHELL_SCRIPTS := $(wildcard scripts/*.sh .claude/hooks/*.sh controlplane/scripts
 
 .DEFAULT_GOAL := help
 .PHONY: help dev-up dev-down dev-reset dev-ps dev-logs dev-psql dev-check dev-token \
-        check-pins check-hooks lint test images \
+        check-pins check-hooks check-contracts lint test images \
         cp-sync cp-lock cp-lint cp-fmt cp-test-unit cp-test cp-migrate \
         cp-image cp-image-check dev-up-app \
         cp-openapi cp-openapi-check console-client console-client-check
 
 help: ## List targets
-	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  %-12s %s\n", $$1, $$2}'
+	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  %-16s %s\n", $$1, $$2}'
 
 dev-up: ## Start the dev stack and wait until every service is healthy
 	scripts/retry.sh 5 $(COMPOSE) pull --quiet
@@ -118,6 +118,9 @@ check-pins: ## Every Compose image is pinned by digest and pre-pulled by cloud-s
 
 check-hooks: ## Self-test the protected-path hook against every protected path
 	scripts/check-protect-spec.sh
+
+check-contracts: ## Validate contracts/: schemas, examples, and pricing fixtures
+	scripts/check-contracts.sh
 
 lint: ## shellcheck the scripts and hooks; actionlint the workflows
 	@command -v shellcheck >/dev/null || { echo "shellcheck not found (apt install shellcheck / brew install shellcheck)"; exit 1; }

@@ -1,0 +1,22 @@
+{
+  "extra-property.json": {
+    "path": "",
+    "keyword": "additionalProperties",
+    "why": "The raw provider message ID is never stored next to its hash."
+  },
+  "short-digest.json": {
+    "path": "/digest",
+    "keyword": "pattern",
+    "why": "An HMAC-SHA256 digest is 64 hex characters."
+  },
+  "unkeyed-sha256.json": {
+    "path": "/algorithm",
+    "keyword": "const",
+    "why": "An unkeyed hash of a low-entropy ID can be brute-forced; only the per-org keyed HMAC is allowed (6.6)."
+  },
+  "uppercase-digest.json": {
+    "path": "/digest",
+    "keyword": "pattern",
+    "why": "One spelling per digest, so relay and trace hashes compare as text (M4)."
+  }
+}

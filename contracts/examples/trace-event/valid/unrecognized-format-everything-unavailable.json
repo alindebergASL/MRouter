@@ -1,0 +1,81 @@
+{
+  "schema_version": "0.1.0",
+  "event_id": "a43bedbf-14e2-4e50-ba43-aa02bb37739b",
+  "org_id": "org_acme",
+  "user_id": "user_017",
+  "device_id": "dev_mbp_017",
+  "harness": "claude-code",
+  "harness_version": {
+    "value": null,
+    "evidence": "unavailable",
+    "unavailable_reason": "unrecognized_format"
+  },
+  "reader": {
+    "id": "trace-reader.claude-code",
+    "version": "0.3.1"
+  },
+  "trace_format": "unrecognized",
+  "session_id": {
+    "value": null,
+    "evidence": "unavailable",
+    "unavailable_reason": "unrecognized_format"
+  },
+  "model": {
+    "value": null,
+    "evidence": "unavailable",
+    "unavailable_reason": "unrecognized_format"
+  },
+  "occurred_at": {
+    "value": null,
+    "evidence": "unavailable",
+    "unavailable_reason": "unrecognized_format"
+  },
+  "observed_at": "2026-10-09T08:12:45Z",
+  "tokens": {
+    "uncached_input": {
+      "value": null,
+      "evidence": "unavailable",
+      "unavailable_reason": "unrecognized_format"
+    },
+    "cache_read": {
+      "value": null,
+      "evidence": "unavailable",
+      "unavailable_reason": "unrecognized_format"
+    },
+    "cache_write_5m": {
+      "value": null,
+      "evidence": "unavailable",
+      "unavailable_reason": "unrecognized_format"
+    },
+    "cache_write_1h": {
+      "value": null,
+      "evidence": "unavailable",
+      "unavailable_reason": "unrecognized_format"
+    },
+    "cache_write_unspecified": {
+      "value": null,
+      "evidence": "unavailable",
+      "unavailable_reason": "unrecognized_format"
+    },
+    "output": {
+      "value": null,
+      "evidence": "unavailable",
+      "unavailable_reason": "unrecognized_format"
+    },
+    "reasoning": {
+      "value": null,
+      "evidence": "unavailable",
+      "unavailable_reason": "unrecognized_format"
+    },
+    "cache_write_total": {
+      "value": null,
+      "evidence": "unavailable",
+      "unavailable_reason": "unrecognized_format"
+    }
+  },
+  "provider_message_id_hmac": {
+    "value": null,
+    "evidence": "unavailable",
+    "unavailable_reason": "unrecognized_format"
+  }
+}

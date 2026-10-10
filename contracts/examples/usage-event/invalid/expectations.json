@@ -1,0 +1,149 @@
+{
+  "anthropic-unspecified-cache-write.json": {
+    "path": "/tokens/cache_write_unspecified/value",
+    "keyword": "type",
+    "why": "Anthropic cache writes always carry a TTL (6.2), so a TTL-less count would be priced under the wrong rule.",
+    "also": [
+      {
+        "path": "/tokens/cache_write_unspecified",
+        "keyword": "required"
+      }
+    ]
+  },
+  "billed-cost-on-unknown-attempt.json": {
+    "path": "/provider_billed_cost/evidence",
+    "keyword": "const",
+    "why": "Provider data for an unknown attempt settles it (7.5), so an unknown record never carries a billed cost."
+  },
+  "ceiling-charge-with-all-usage-known.json": {
+    "path": "",
+    "keyword": "anyOf",
+    "why": "A ceiling charge is only for an attempt whose exact usage was never found (7.5); this one has all of it."
+  },
+  "estimated-evidence-on-relay-record.json": {
+    "path": "/tokens/output/evidence",
+    "keyword": "enum",
+    "why": "Estimated values come only from trace readers; a relay usage record never carries them (6.5)."
+  },
+  "free-text-in-session-id.json": {
+    "path": "/correlation/session_id/value",
+    "keyword": "pattern",
+    "why": "Identifiers admit no whitespace, so an ID field cannot carry prose (C2)."
+  },
+  "local-cost-as-measured-zero.json": {
+    "path": "/computed_cost",
+    "keyword": "required",
+    "why": "A local model is metered but not billed: its cost is unavailable with not_billed, not a measured 0."
+  },
+  "local-provider-on-relay-path.json": {
+    "path": "/routing/data_path",
+    "keyword": "const",
+    "why": "Local models are reached only by the sidecar directly, never through the relay (2, 5).",
+    "also": [
+      {
+        "path": "/correlation/provider_message_id_hmac/evidence",
+        "keyword": "not"
+      }
+    ]
+  },
+  "missing-message-hash-on-priced-response.json": {
+    "path": "/correlation/provider_message_id_hmac/evidence",
+    "keyword": "not",
+    "why": "A relay response priced from usage carries the keyed hash that keeps trace events from counting it twice (M4)."
+  },
+  "money-as-json-float.json": {
+    "path": "",
+    "keyword": "parse:float",
+    "why": "Money is integer nano-dollars; a JSON float such as 209000000.0 cannot hold exact money (6.4)."
+  },
+  "not-billed-on-relay-attempt.json": {
+    "path": "/computed_cost/unavailable_reason",
+    "keyword": "enum",
+    "why": "Only local models are not billed; marking a paid relay attempt not_billed would drop it from spend (B1)."
+  },
+  "openai-record-with-anthropic-speed.json": {
+    "path": "/dimensions/speed/value",
+    "keyword": "type",
+    "why": "OpenAI has no speed parameter; a mis-mapped setting would be priced under the wrong rule (6.2, 6.3)."
+  },
+  "openai-ttl-cache-write.json": {
+    "path": "/tokens/cache_write_5m/value",
+    "keyword": "type",
+    "why": "OpenAI cache writes carry no TTL (6.2); a 5-minute count on an OpenAI record would be priced at Anthropic's rule."
+  },
+  "prompt-excerpt-extra-property.json": {
+    "path": "",
+    "keyword": "additionalProperties",
+    "why": "The record is closed: no field may carry prompt or response text (C2)."
+  },
+  "public-listener-with-device-id.json": {
+    "path": "/identity/device_id",
+    "keyword": "type",
+    "why": "Public-listener (Cursor) traffic authenticates with a virtual key and has no device (4, 5.1)."
+  },
+  "raw-speed-value-turbo.json": {
+    "path": "/dimensions/speed/value",
+    "keyword": "enum",
+    "why": "Price dimensions are enumerated; an unrecognized value is stored as null with unrecognized_value, never raw (C2, 6.3)."
+  },
+  "relay-retry-without-original.json": {
+    "path": "/correlation/retry_of_attempt_id",
+    "keyword": "type",
+    "why": "A relay retry is its own attempt with its own reservation and names the attempt it retries (7.2, B2)."
+  },
+  "settled-without-settled-at.json": {
+    "path": "/settled_at",
+    "keyword": "type",
+    "why": "A settled attempt carries its settlement time."
+  },
+  "state-released.json": {
+    "path": "/state",
+    "keyword": "enum",
+    "why": "A released attempt sent no byte upstream, so it has no usage record (7.5)."
+  },
+  "unavailable-cost-given-as-zero.json": {
+    "path": "/computed_cost/nanodollars",
+    "keyword": "type",
+    "why": "A cost that cannot be computed is null with a reason, never 0 nd (6.5)."
+  },
+  "unavailable-count-without-reason.json": {
+    "path": "/tokens/reasoning",
+    "keyword": "required",
+    "why": "An unavailable value must say why it is unavailable (6.5)."
+  },
+  "unavailable-given-as-zero.json": {
+    "path": "/tokens/output/value",
+    "keyword": "type",
+    "why": "An unavailable count must be null with a reason; 0 would read as a measured zero (6.5)."
+  },
+  "unpriced-without-unpriced-dimensions.json": {
+    "path": "/computed_cost",
+    "keyword": "required",
+    "why": "An unpriced cost must name which price-book dimensions were missing (6.3, M5)."
+  },
+  "unrecognized-dimension-with-computed-cost.json": {
+    "path": "/computed_cost",
+    "keyword": "required",
+    "why": "Unpriced, not guessed: an unrecognized speed makes the attempt unpriced, never a computed amount (6.3, B3)."
+  },
+  "upstream-error-with-output.json": {
+    "path": "/tokens/output",
+    "keyword": "anyOf",
+    "why": "An error after output began may be billed: it settles from partial stream usage or by ceiling charge, never as 0 (7.5)."
+  },
+  "upstream-error-with-reasoning.json": {
+    "path": "/tokens/reasoning",
+    "keyword": "anyOf",
+    "why": "Reasoning tokens are billed as output (6.2); an error that produced them is not free."
+  },
+  "usage-cost-on-interrupted-count.json": {
+    "path": "/tokens/output/unavailable_reason",
+    "keyword": "const",
+    "why": "A cost computed from usage cannot rest on a count that was lost: that prices unavailable as zero (6.5)."
+  },
+  "usage-split-not-flagged.json": {
+    "path": "",
+    "keyword": "semantic:usage_inconsistent_flagged",
+    "why": "Contradictory usage settles at the higher-cost reading and is flagged (6.3); an unflagged record hides it."
+  }
+}

@@ -1,0 +1,17 @@
+{
+  "month-13.json": {
+    "path": "",
+    "keyword": "pattern",
+    "why": "Months run 01 to 12."
+  },
+  "offset-instead-of-z.json": {
+    "path": "",
+    "keyword": "pattern",
+    "why": "Timestamps are UTC with a Z suffix, so they compare as text."
+  },
+  "space-separator.json": {
+    "path": "",
+    "keyword": "pattern",
+    "why": "RFC 3339 uses T between date and time."
+  }
+}

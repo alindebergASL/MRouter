@@ -1,0 +1,37 @@
+{
+  "empty.json": {
+    "path": "",
+    "keyword": "pattern",
+    "why": "An empty string is not a number."
+  },
+  "exponent.json": {
+    "path": "",
+    "keyword": "pattern",
+    "why": "Exact decimals have no exponent (6.4)."
+  },
+  "json-number.json": {
+    "path": "",
+    "keyword": "parse:float",
+    "why": "A rate as a JSON float cannot be exact (6.4)."
+  },
+  "leading-dot.json": {
+    "path": "",
+    "keyword": "pattern",
+    "why": "A leading digit is required."
+  },
+  "leading-zero.json": {
+    "path": "",
+    "keyword": "pattern",
+    "why": "No leading zeros, so each value has one spelling."
+  },
+  "negative.json": {
+    "path": "",
+    "keyword": "pattern",
+    "why": "Rates, multipliers, and fees are never negative."
+  },
+  "trailing-dot.json": {
+    "path": "",
+    "keyword": "pattern",
+    "why": "A fraction needs at least one digit."
+  }
+}

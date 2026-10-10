@@ -1,0 +1,133 @@
+{
+  "schema_version": "0.1.0",
+  "attempt_id": "1a6d3b9f-4c2e-4d7f-8b10-2e3f4d5c6b71",
+  "revision": 1,
+  "recorded_at": "2026-10-08T15:21:34.120Z",
+  "state": "unknown",
+  "dispatched_at": "2026-10-08T15:20:04.117Z",
+  "settled_at": null,
+  "identity": {
+    "org_id": "org_acme",
+    "workspace_id": "ws_main",
+    "team_id": "team_platform",
+    "user_id": "user_023",
+    "device_id": "dev_0057",
+    "virtual_key_id": null,
+    "harness": "codex",
+    "initiator": "harness"
+  },
+  "correlation": {
+    "session_id": {
+      "value": "e6c9f1b5-08ea-4d9c-a7dc-eafb09b9b73d",
+      "evidence": "measured"
+    },
+    "prompt_id": {
+      "value": null,
+      "evidence": "unavailable",
+      "unavailable_reason": "not_reported"
+    },
+    "provider_request_id": {
+      "value": "req_synthetic_b2",
+      "evidence": "measured"
+    },
+    "provider_message_id_hmac": {
+      "value": {
+        "algorithm": "hmac-sha256",
+        "key_id": "hk_org_acme_2026q4",
+        "digest": "c0302ee0f424bdef4d33e9e4be82509cd33823aa97e3030b9d6d94753d31accd"
+      },
+      "evidence": "measured"
+    },
+    "retry_of_attempt_id": null
+  },
+  "routing": {
+    "provider": "openai",
+    "model": "gpt-5.6",
+    "route_id": "route_codex_default",
+    "route_type": "passthrough",
+    "data_path": "relay",
+    "price_book_version": "pb_2026-09-01.1",
+    "shadow_decision_id": null
+  },
+  "dimensions": {
+    "speed": {
+      "value": "fast"
+    },
+    "service_tier": {
+      "value": "default"
+    },
+    "inference_geo": {
+      "value": "global"
+    },
+    "long_context_applied": {
+      "value": null,
+      "unavailable_reason": "not_reported"
+    }
+  },
+  "tokens": {
+    "uncached_input": {
+      "value": null,
+      "evidence": "unavailable",
+      "unavailable_reason": "stream_interrupted"
+    },
+    "cache_read": {
+      "value": null,
+      "evidence": "unavailable",
+      "unavailable_reason": "stream_interrupted"
+    },
+    "cache_write_5m": {
+      "value": null,
+      "evidence": "unavailable",
+      "unavailable_reason": "not_applicable"
+    },
+    "cache_write_1h": {
+      "value": null,
+      "evidence": "unavailable",
+      "unavailable_reason": "not_applicable"
+    },
+    "cache_write_unspecified": {
+      "value": null,
+      "evidence": "unavailable",
+      "unavailable_reason": "stream_interrupted"
+    },
+    "output": {
+      "value": null,
+      "evidence": "unavailable",
+      "unavailable_reason": "stream_interrupted"
+    },
+    "reasoning": {
+      "value": null,
+      "evidence": "unavailable",
+      "unavailable_reason": "stream_interrupted"
+    },
+    "cache_write_total": {
+      "value": null,
+      "evidence": "unavailable",
+      "unavailable_reason": "not_applicable"
+    }
+  },
+  "fees": [],
+  "computed_cost": {
+    "nanodollars": null,
+    "evidence": "unavailable",
+    "basis": null,
+    "unavailable_reason": "usage_unavailable"
+  },
+  "provider_billed_cost": {
+    "nanodollars": null,
+    "evidence": "unavailable",
+    "unavailable_reason": "pending_reconciliation"
+  },
+  "timing": {
+    "ttfb_ms": {
+      "value": 640,
+      "evidence": "measured"
+    },
+    "duration_ms": {
+      "value": null,
+      "evidence": "unavailable",
+      "unavailable_reason": "stream_interrupted"
+    }
+  },
+  "flags": []
+}

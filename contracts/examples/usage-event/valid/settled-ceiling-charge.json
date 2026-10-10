@@ -1,0 +1,130 @@
+{
+  "schema_version": "0.1.0",
+  "attempt_id": "4d906e2c-7f51-4a03-9e43-516270808ea4",
+  "revision": 2,
+  "recorded_at": "2026-10-08T09:12:41.000Z",
+  "state": "settled",
+  "dispatched_at": "2026-10-06T09:12:40.003Z",
+  "settled_at": "2026-10-08T09:12:41.000Z",
+  "identity": {
+    "org_id": "org_acme",
+    "workspace_id": "ws_main",
+    "team_id": "team_platform",
+    "user_id": "user_017",
+    "device_id": "dev_0042",
+    "virtual_key_id": null,
+    "harness": "claude-code",
+    "initiator": "harness"
+  },
+  "correlation": {
+    "session_id": {
+      "value": "c4a7df93-e6c8-4b7a-85ba-c8d9e7f7f51b",
+      "evidence": "measured"
+    },
+    "prompt_id": {
+      "value": "d5b8e0a4-f7d9-4c8b-96cb-d9eaf8a8a62c",
+      "evidence": "measured"
+    },
+    "provider_request_id": {
+      "value": null,
+      "evidence": "unavailable",
+      "unavailable_reason": "not_reported"
+    },
+    "provider_message_id_hmac": {
+      "value": null,
+      "evidence": "unavailable",
+      "unavailable_reason": "no_response"
+    },
+    "retry_of_attempt_id": null
+  },
+  "routing": {
+    "provider": "anthropic",
+    "model": "claude-opus-5-5",
+    "route_id": "route_claude_default",
+    "route_type": "passthrough",
+    "data_path": "relay",
+    "price_book_version": "pb_2026-09-01.1",
+    "shadow_decision_id": null
+  },
+  "dimensions": {
+    "speed": {
+      "value": "standard"
+    },
+    "service_tier": {
+      "value": null,
+      "unavailable_reason": "not_reported"
+    },
+    "inference_geo": {
+      "value": "global"
+    },
+    "long_context_applied": {
+      "value": false
+    }
+  },
+  "tokens": {
+    "uncached_input": {
+      "value": null,
+      "evidence": "unavailable",
+      "unavailable_reason": "no_response"
+    },
+    "cache_read": {
+      "value": null,
+      "evidence": "unavailable",
+      "unavailable_reason": "no_response"
+    },
+    "cache_write_5m": {
+      "value": null,
+      "evidence": "unavailable",
+      "unavailable_reason": "no_response"
+    },
+    "cache_write_1h": {
+      "value": null,
+      "evidence": "unavailable",
+      "unavailable_reason": "no_response"
+    },
+    "cache_write_unspecified": {
+      "value": null,
+      "evidence": "unavailable",
+      "unavailable_reason": "not_applicable"
+    },
+    "output": {
+      "value": null,
+      "evidence": "unavailable",
+      "unavailable_reason": "no_response"
+    },
+    "reasoning": {
+      "value": null,
+      "evidence": "unavailable",
+      "unavailable_reason": "no_response"
+    },
+    "cache_write_total": {
+      "value": null,
+      "evidence": "unavailable",
+      "unavailable_reason": "no_response"
+    }
+  },
+  "fees": [],
+  "computed_cost": {
+    "nanodollars": 1640000000,
+    "evidence": "inferred",
+    "basis": "ceiling_charge"
+  },
+  "provider_billed_cost": {
+    "nanodollars": null,
+    "evidence": "unavailable",
+    "unavailable_reason": "pending_reconciliation"
+  },
+  "timing": {
+    "ttfb_ms": {
+      "value": null,
+      "evidence": "unavailable",
+      "unavailable_reason": "no_response"
+    },
+    "duration_ms": {
+      "value": null,
+      "evidence": "unavailable",
+      "unavailable_reason": "no_response"
+    }
+  },
+  "flags": []
+}

@@ -1,0 +1,347 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:purser:contracts:price-book:0.1.0",
+  "title": "Price book",
+  "description": "A versioned, effective-dated price book published by the control plane to the relay (architecture 6.3). Each entry prices one provider model with a set of rules, one per rule type in 6.3. Rates are exact-decimal strings in USD per million tokens and multipliers are exact-decimal strings (6.4); an attempt is computed in exact decimal arithmetic and rounded once (half-up when settled, up for ceilings). Every entry and every rule carries a dated source. Anything the book does not cover is unpriced, never zero or a default: a model with no entry, a token class with no rate, a dimension value not listed, any value for a dimension the entry has no rule for (even the provider's default), or a fee not listed (6.3, B3). Rules match the value the request carries, or the route's configuration; usage events record the value the provider reports.",
+  "$comment": "Cross-field rules, checked on fixtures and examples by the validator: values within a dimension rule are distinct and include default_value when it is set; fee_id values within an entry are distinct; every window ends after it starts; promotion windows within an entry do not overlap; entries for one provider and model do not overlap in time.",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "price_book_version",
+    "published_at",
+    "currency",
+    "rate_unit",
+    "stacking_order",
+    "entries"
+  ],
+  "properties": {
+    "schema_version": {"$ref": "urn:purser:contracts:common:0.1.0#/$defs/schema_version"},
+    "price_book_version": {
+      "description": "Identifies this book. An attempt is priced with the version effective when its reservation committed (P1).",
+      "$ref": "urn:purser:contracts:common:0.1.0#/$defs/id"
+    },
+    "published_at": {"$ref": "urn:purser:contracts:common:0.1.0#/$defs/rfc3339_utc"},
+    "currency": {"const": "USD"},
+    "rate_unit": {
+      "description": "Token rates are USD per million tokens, the unit provider pricing pages use.",
+      "const": "usd_per_million_tokens"
+    },
+    "stacking_order": {
+      "description": "How rules combine (6.3, 7.4). Per token class: the base rate, replaced by a promotion's rate while one is in effect; times the long-context multiplier when the tier applies; times the speed or service-tier multiplier; times the geography multiplier; times the negotiated multiplier. Then per-use fees are added, never multiplied. The multipliers commute because rounding happens once per attempt; the order matters for replacement and for fees.",
+      "const": [
+        "base_rates",
+        "promotion",
+        "long_context",
+        "speed_or_service_tier",
+        "geography",
+        "negotiated",
+        "per_use_fee"
+      ]
+    },
+    "entries": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/entry"}}
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "source": {
+      "description": "A dated provider source: the page the values were read from and the date they were checked. The pricing-auditor fetches it and compares every value.",
+      "type": "object",
+      "required": ["url", "as_of"],
+      "properties": {
+        "url": {"$ref": "urn:purser:contracts:common:0.1.0#/$defs/https_url"},
+        "as_of": {"$ref": "urn:purser:contracts:common:0.1.0#/$defs/date"}
+      },
+      "additionalProperties": false
+    },
+    "contract_source": {
+      "description": "A negotiated rate's source: a customer contract, referenced by ID (contracts are never committed) and dated.",
+      "type": "object",
+      "required": ["contract_id", "as_of"],
+      "properties": {
+        "contract_id": {"$ref": "urn:purser:contracts:common:0.1.0#/$defs/id"},
+        "as_of": {"$ref": "urn:purser:contracts:common:0.1.0#/$defs/date"}
+      },
+      "additionalProperties": false
+    },
+    "class_rates": {
+      "description": "Rates per priced token class, USD per million tokens. A class that is absent is unpriced: an attempt that incurs it is unpriced. cache_write_unspecified is for providers whose cache writes carry no TTL (OpenAI).",
+      "type": "object",
+      "minProperties": 1,
+      "properties": {
+        "uncached_input": {"$ref": "urn:purser:contracts:common:0.1.0#/$defs/decimal"},
+        "cache_read": {"$ref": "urn:purser:contracts:common:0.1.0#/$defs/decimal"},
+        "cache_write_5m": {"$ref": "urn:purser:contracts:common:0.1.0#/$defs/decimal"},
+        "cache_write_1h": {"$ref": "urn:purser:contracts:common:0.1.0#/$defs/decimal"},
+        "cache_write_unspecified": {"$ref": "urn:purser:contracts:common:0.1.0#/$defs/decimal"},
+        "output": {"$ref": "urn:purser:contracts:common:0.1.0#/$defs/decimal"}
+      },
+      "additionalProperties": false
+    },
+    "class_multipliers": {
+      "description": "Multipliers per priced token class. A rule that lists no multiplier for a class leaves that class unpriced while the rule applies; list 1 to leave it unchanged.",
+      "type": "object",
+      "minProperties": 1,
+      "properties": {
+        "uncached_input": {"$ref": "urn:purser:contracts:common:0.1.0#/$defs/decimal"},
+        "cache_read": {"$ref": "urn:purser:contracts:common:0.1.0#/$defs/decimal"},
+        "cache_write_5m": {"$ref": "urn:purser:contracts:common:0.1.0#/$defs/decimal"},
+        "cache_write_1h": {"$ref": "urn:purser:contracts:common:0.1.0#/$defs/decimal"},
+        "cache_write_unspecified": {"$ref": "urn:purser:contracts:common:0.1.0#/$defs/decimal"},
+        "output": {"$ref": "urn:purser:contracts:common:0.1.0#/$defs/decimal"}
+      },
+      "additionalProperties": false
+    },
+    "entry": {
+      "description": "One provider model, effective from effective_from until effective_until (exclusive; null for open-ended). It has exactly one base_rates rule.",
+      "type": "object",
+      "required": ["entry_id", "provider", "model", "effective_from", "effective_until", "source", "rules"],
+      "properties": {
+        "entry_id": {"$ref": "urn:purser:contracts:common:0.1.0#/$defs/id"},
+        "provider": {"$ref": "urn:purser:contracts:common:0.1.0#/$defs/provider"},
+        "model": {
+          "description": "The model ID, matched exactly in v0.",
+          "$ref": "urn:purser:contracts:common:0.1.0#/$defs/model_id"
+        },
+        "effective_from": {"$ref": "urn:purser:contracts:common:0.1.0#/$defs/rfc3339_utc"},
+        "effective_until": {
+          "oneOf": [{"$ref": "urn:purser:contracts:common:0.1.0#/$defs/rfc3339_utc"}, {"type": "null"}]
+        },
+        "source": {"$ref": "#/$defs/source"},
+        "rules": {
+          "type": "array",
+          "minItems": 1,
+          "items": {"$ref": "#/$defs/rule"},
+          "allOf": [
+            {
+              "contains": {"properties": {"type": {"const": "base_rates"}}, "required": ["type"]},
+              "minContains": 1,
+              "maxContains": 1
+            },
+            {
+              "contains": {
+                "properties": {"type": {"const": "speed_or_service_tier"}, "dimension": {"const": "speed"}},
+                "required": ["type", "dimension"]
+              },
+              "minContains": 0,
+              "maxContains": 1
+            },
+            {
+              "contains": {
+                "properties": {
+                  "type": {"const": "speed_or_service_tier"},
+                  "dimension": {"const": "service_tier"}
+                },
+                "required": ["type", "dimension"]
+              },
+              "minContains": 0,
+              "maxContains": 1
+            },
+            {
+              "contains": {"properties": {"type": {"const": "geography"}}, "required": ["type"]},
+              "minContains": 0,
+              "maxContains": 1
+            },
+            {
+              "contains": {"properties": {"type": {"const": "long_context"}}, "required": ["type"]},
+              "minContains": 0,
+              "maxContains": 1
+            }
+          ],
+          "description": "Exactly one base_rates rule, and at most one rule for each modifier (speed, service tier, geography, long context), so stacking is never ambiguous. Promotions, negotiated rates, and fees may repeat with distinct windows, org IDs, or fee IDs."
+        },
+        "input_bound": {"$ref": "#/$defs/input_bound"}
+      },
+      "additionalProperties": false
+    },
+    "rule": {
+      "oneOf": [
+        {"$ref": "#/$defs/base_rates"},
+        {"$ref": "#/$defs/speed_or_service_tier"},
+        {"$ref": "#/$defs/geography"},
+        {"$ref": "#/$defs/long_context"},
+        {"$ref": "#/$defs/per_use_fee"},
+        {"$ref": "#/$defs/promotion"},
+        {"$ref": "#/$defs/negotiated"}
+      ]
+    },
+    "base_rates": {
+      "description": "Base rates per token class (6.3).",
+      "type": "object",
+      "required": ["type", "source", "rates"],
+      "properties": {
+        "type": {"const": "base_rates"},
+        "source": {"$ref": "#/$defs/source"},
+        "rates": {"$ref": "#/$defs/class_rates"}
+      },
+      "additionalProperties": false
+    },
+    "dimension_value": {
+      "type": "object",
+      "required": ["value", "multiplier"],
+      "properties": {
+        "value": {"$ref": "urn:purser:contracts:common:0.1.0#/$defs/id"},
+        "multiplier": {"$ref": "urn:purser:contracts:common:0.1.0#/$defs/decimal"}
+      },
+      "additionalProperties": false
+    },
+    "dimension_rule": {
+      "$comment": "Shared shape of the speed_or_service_tier and geography rules. dimension_source request_param: the value is read from the request (Anthropic speed, service_tier, inference_geo; OpenAI service_tier). route_config: the value is a property of the route's upstream configuration, such as an OpenAI data-residency project. when_omitted says how a request that omits the parameter is priced: default_value applies default_value, the provider's fixed default; max_listed means the provider resolves it from account settings the relay cannot see (such as Anthropic's workspace default_inference_geo), so a ceiling uses the highest multiplier in values (a bound, 7.4) and a settled cost uses the value the provider reports in usage, unpriced if none is reported; unpriced makes the request unpriced. A value not listed in values is unpriced. The multiplier applies to every token class.",
+      "required": [
+        "type",
+        "source",
+        "dimension",
+        "dimension_source",
+        "parameter",
+        "when_omitted",
+        "default_value",
+        "values"
+      ],
+      "properties": {
+        "source": {"$ref": "#/$defs/source"},
+        "dimension_source": {"enum": ["request_param", "route_config"]},
+        "parameter": {
+          "description": "The request field or route setting that carries the value, such as speed, service_tier, or inference_geo.",
+          "$ref": "urn:purser:contracts:common:0.1.0#/$defs/id"
+        },
+        "default_value": {
+          "description": "The provider's fixed default; set exactly when when_omitted is default_value.",
+          "oneOf": [{"$ref": "urn:purser:contracts:common:0.1.0#/$defs/id"}, {"type": "null"}]
+        },
+        "values": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 32,
+          "items": {"$ref": "#/$defs/dimension_value"}
+        },
+        "when_omitted": {"enum": ["default_value", "max_listed", "unpriced"]}
+      },
+      "allOf": [
+        {
+          "if": {"properties": {"when_omitted": {"const": "default_value"}}, "required": ["when_omitted"]},
+          "then": {"properties": {"default_value": {"$ref": "urn:purser:contracts:common:0.1.0#/$defs/id"}}},
+          "else": {"properties": {"default_value": {"type": "null"}}}
+        }
+      ]
+    },
+    "speed_or_service_tier": {
+      "description": "Speed or service-tier multiplier on all token classes for a request-level setting (6.3), such as Anthropic fast mode or OpenAI flex and fast.",
+      "type": "object",
+      "properties": {
+        "type": {"const": "speed_or_service_tier"},
+        "dimension": {"enum": ["speed", "service_tier"]}
+      },
+      "unevaluatedProperties": false,
+      "allOf": [{"$ref": "#/$defs/dimension_rule"}]
+    },
+    "geography": {
+      "description": "Data-residency multiplier on all token classes (6.3), such as Anthropic inference_geo us or an OpenAI regional-processing project.",
+      "type": "object",
+      "properties": {"type": {"const": "geography"}, "dimension": {"const": "inference_geo"}},
+      "unevaluatedProperties": false,
+      "allOf": [{"$ref": "#/$defs/dimension_rule"}]
+    },
+    "long_context": {
+      "description": "Long-context tier (6.3, 7.4): when total input, including cache reads and writes, is greater than the threshold, these multipliers price the whole request. A class with no multiplier is unpriced while the tier applies.",
+      "type": "object",
+      "required": ["type", "source", "threshold_input_tokens", "comparison", "input_measure", "multipliers"],
+      "properties": {
+        "type": {"const": "long_context"},
+        "source": {"$ref": "#/$defs/source"},
+        "threshold_input_tokens": {"type": "integer", "minimum": 1, "maximum": 9223372036854775807},
+        "comparison": {"const": "greater_than"},
+        "input_measure": {"const": "total_input_including_cache"},
+        "multipliers": {"$ref": "#/$defs/class_multipliers"}
+      },
+      "additionalProperties": false
+    },
+    "per_use_fee": {
+      "description": "A fixed charge per use of a server tool (6.3), such as Anthropic web search. unit_price_usd may be 0 (web fetch), which keeps the tool priced. Fees are added after token cost and are never multiplied (7.4). A request that can incur a non-zero fee is bounded only if it sets max_uses_parameter (7.2), so the ceiling can add count times price.",
+      "type": "object",
+      "required": [
+        "type",
+        "source",
+        "fee_id",
+        "usage_field",
+        "unit_price_usd",
+        "billed_on_error",
+        "max_uses_parameter",
+        "token_multipliers_apply"
+      ],
+      "properties": {
+        "type": {"const": "per_use_fee"},
+        "source": {"$ref": "#/$defs/source"},
+        "fee_id": {"$ref": "urn:purser:contracts:common:0.1.0#/$defs/id"},
+        "usage_field": {
+          "description": "The provider usage field that counts uses, as a dotted path, such as usage.server_tool_use.web_search_requests.",
+          "$ref": "urn:purser:contracts:common:0.1.0#/$defs/id"
+        },
+        "unit_price_usd": {"$ref": "urn:purser:contracts:common:0.1.0#/$defs/decimal"},
+        "billed_on_error": {"type": "boolean"},
+        "max_uses_parameter": {
+          "description": "The tool-definition parameter that caps uses, such as max_uses. Required when unit_price_usd is not zero; null only for a zero fee, which needs no cap.",
+          "oneOf": [{"$ref": "urn:purser:contracts:common:0.1.0#/$defs/id"}, {"type": "null"}]
+        },
+        "token_multipliers_apply": {"const": false}
+      },
+      "additionalProperties": false,
+      "if": {
+        "properties": {"unit_price_usd": {"pattern": "^0([.]0{1,18})?(?!\\n)$"}},
+        "required": ["unit_price_usd"]
+      },
+      "else": {"properties": {"max_uses_parameter": {"$ref": "urn:purser:contracts:common:0.1.0#/$defs/id"}}}
+    },
+    "promotion": {
+      "description": "Time-boxed rates (6.3) that replace the base rates for the classes they list, from starts_at until ends_at (exclusive). Multipliers then apply on top.",
+      "type": "object",
+      "required": ["type", "source", "starts_at", "ends_at", "rates"],
+      "properties": {
+        "type": {"const": "promotion"},
+        "source": {"$ref": "#/$defs/source"},
+        "starts_at": {"$ref": "urn:purser:contracts:common:0.1.0#/$defs/rfc3339_utc"},
+        "ends_at": {"$ref": "urn:purser:contracts:common:0.1.0#/$defs/rfc3339_utc"},
+        "rates": {"$ref": "#/$defs/class_rates"}
+      },
+      "additionalProperties": false
+    },
+    "negotiated": {
+      "description": "Org-specific multipliers from a customer contract (6.3), applied after geography. Whether negotiated rates should instead override rates, and how they combine with promotions, is open question 11 in the PR.",
+      "type": "object",
+      "required": ["type", "source", "org_id", "effective_from", "effective_until", "multipliers"],
+      "properties": {
+        "type": {"const": "negotiated"},
+        "source": {"$ref": "#/$defs/contract_source"},
+        "org_id": {"$ref": "urn:purser:contracts:common:0.1.0#/$defs/id"},
+        "effective_from": {"$ref": "urn:purser:contracts:common:0.1.0#/$defs/rfc3339_utc"},
+        "effective_until": {
+          "oneOf": [{"$ref": "urn:purser:contracts:common:0.1.0#/$defs/rfc3339_utc"}, {"type": "null"}]
+        },
+        "multipliers": {"$ref": "#/$defs/class_multipliers"}
+      },
+      "additionalProperties": false
+    },
+    "input_bound": {
+      "description": "A certified ratio bound on input tokens for the entry's tokenizer (7.3): tokens <= k x UTF-8 bytes + per-message overhead, established on a test corpus with a safety margin. Absent means the ratio method is unavailable for this model and the relay falls back per 7.3 (exact count, then the context window); it never means k = 0. The context window itself belongs to the model catalog.",
+      "type": "object",
+      "required": ["tokenizer_id", "k", "per_message_overhead_tokens", "certification"],
+      "properties": {
+        "tokenizer_id": {"$ref": "urn:purser:contracts:common:0.1.0#/$defs/id"},
+        "k": {
+          "description": "Tokens per UTF-8 byte, an exact decimal greater than 0; a zero k would bound input by the overhead alone (B1).",
+          "$ref": "urn:purser:contracts:common:0.1.0#/$defs/decimal",
+          "not": {"pattern": "^0([.]0{1,18})?(?!\\n)$"}
+        },
+        "per_message_overhead_tokens": {"type": "integer", "minimum": 0, "maximum": 1000000},
+        "certification": {
+          "type": "object",
+          "required": ["corpus_id", "safety_margin", "as_of"],
+          "properties": {
+            "corpus_id": {"$ref": "urn:purser:contracts:common:0.1.0#/$defs/id"},
+            "safety_margin": {"$ref": "urn:purser:contracts:common:0.1.0#/$defs/decimal"},
+            "as_of": {"$ref": "urn:purser:contracts:common:0.1.0#/$defs/date"}
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}

@@ -1,0 +1,52 @@
+{
+  "schema_version": "0.1.0",
+  "decision_id": "39a0b1c2-d3e4-4f56-8a7b-8c9d0e1f2a3b",
+  "actuator": "proxy",
+  "decided_at": "2026-10-08T17:05:58.731Z",
+  "mode": "shadow",
+  "policy_version": "policy_v12",
+  "episode": {
+    "kind": "harness_session",
+    "session_id": "sess_codex_19b2"
+  },
+  "attempt_id": "4ab1c2d3-e4f5-4067-9b8c-9d0e1f2a3b4c",
+  "route": {
+    "route_id": "route_stage_signals",
+    "route_type": "stage"
+  },
+  "input_features": {
+    "request_class": "unknown",
+    "requested_model": "gpt-5-codex",
+    "turn_index": {
+      "value": 6,
+      "evidence": "measured"
+    },
+    "context_tokens": {
+      "value": 52840,
+      "evidence": "measured"
+    },
+    "tool_calls_in_context": {
+      "value": 0,
+      "evidence": "unavailable",
+      "unavailable_reason": "not_reported"
+    },
+    "tool_errors_in_context": {
+      "value": null,
+      "evidence": "unavailable",
+      "unavailable_reason": "not_reported"
+    },
+    "consecutive_bad_turns": {
+      "value": 0,
+      "evidence": "measured"
+    }
+  },
+  "decision_model": null,
+  "decision_model_output": null,
+  "escalation": null,
+  "experiment_arm": null,
+  "chosen_target": {
+    "provider": "openai",
+    "model": "gpt-5-mini",
+    "tier": "fast"
+  }
+}
