@@ -5,7 +5,8 @@
   "status": 503,
   "headers": {
     "content-type": "application/json",
-    "purser-attempt-id": "35ea7e5c-1d6b-4a2f-9c0e-5b6a7f8e9d0c"
+    "purser-attempt-id": "35ea7e5c-1d6b-4a2f-9c0e-5b6a7f8e9d0c",
+    "x-request-id": "35ea7e5c-1d6b-4a2f-9c0e-5b6a7f8e9d0c"
   },
   "body": {
     "error": {

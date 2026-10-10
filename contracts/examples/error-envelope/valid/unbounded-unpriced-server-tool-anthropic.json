@@ -5,7 +5,8 @@
   "status": 400,
   "headers": {
     "content-type": "application/json",
-    "purser-attempt-id": "f1ac3a1e-7f2d-4c8b-9e6a-1d2c3b4a5f6e"
+    "purser-attempt-id": "f1ac3a1e-7f2d-4c8b-9e6a-1d2c3b4a5f6e",
+    "request-id": "f1ac3a1e-7f2d-4c8b-9e6a-1d2c3b4a5f6e"
   },
   "body": {
     "type": "error",
@@ -15,6 +16,7 @@
       "details": {
         "error_code": "purser_unbounded_unpriced_server_tool"
       }
-    }
+    },
+    "request_id": "f1ac3a1e-7f2d-4c8b-9e6a-1d2c3b4a5f6e"
   }
 }

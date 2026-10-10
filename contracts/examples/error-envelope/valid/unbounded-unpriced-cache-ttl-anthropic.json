@@ -5,7 +5,8 @@
   "status": 400,
   "headers": {
     "content-type": "application/json",
-    "purser-attempt-id": "02bd4b2f-8a3e-4d9c-8f7b-2e3d4c5b6a7f"
+    "purser-attempt-id": "02bd4b2f-8a3e-4d9c-8f7b-2e3d4c5b6a7f",
+    "request-id": "02bd4b2f-8a3e-4d9c-8f7b-2e3d4c5b6a7f"
   },
   "body": {
     "type": "error",
@@ -15,6 +16,7 @@
       "details": {
         "error_code": "purser_unbounded_unpriced_cache_ttl"
       }
-    }
+    },
+    "request_id": "02bd4b2f-8a3e-4d9c-8f7b-2e3d4c5b6a7f"
   }
 }

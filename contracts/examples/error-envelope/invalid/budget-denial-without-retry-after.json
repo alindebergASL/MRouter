@@ -5,7 +5,8 @@
   "status": 429,
   "headers": {
     "content-type": "application/json",
-    "purser-attempt-id": "5d0e3c1a-7b2f-4e8d-9a6c-1f2e3d4c5b6a"
+    "purser-attempt-id": "5d0e3c1a-7b2f-4e8d-9a6c-1f2e3d4c5b6a",
+    "request-id": "5d0e3c1a-7b2f-4e8d-9a6c-1f2e3d4c5b6a"
   },
   "body": {
     "type": "error",
@@ -22,6 +23,7 @@
           "remaining_nanodollars": 310000000
         }
       }
-    }
+    },
+    "request_id": "5d0e3c1a-7b2f-4e8d-9a6c-1f2e3d4c5b6a"
   }
 }

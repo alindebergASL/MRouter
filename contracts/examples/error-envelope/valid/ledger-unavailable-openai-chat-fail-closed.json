@@ -6,7 +6,8 @@
   "headers": {
     "content-type": "application/json",
     "purser-attempt-id": "46fb8f6d-2e7c-4b3a-8d1f-6c7b8a9f0e1d",
-    "retry-after": "5"
+    "retry-after": "5",
+    "x-request-id": "46fb8f6d-2e7c-4b3a-8d1f-6c7b8a9f0e1d"
   },
   "body": {
     "error": {

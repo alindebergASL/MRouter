@@ -3,7 +3,7 @@
   "$id": "urn:purser:contracts:error-envelope:0.1.0",
   "title": "Router denial response",
   "description": "A denial the router returns itself, before any upstream byte is sent, in the client's own protocol so harnesses parse it natively (B3, B4, C3, B5). The document is the HTTP response: status, the headers the router sets, and the JSON body. Anthropic Messages bodies use Anthropic's error shape, with the router's code in error.details.error_code, the slot Anthropic's own spend-limit error uses. OpenAI Chat Completions and Responses share one HTTP error shape, with the code in error.code. Each code has a fixed status, error type, and message template with no interpolation, so a body never echoes request content (C2); budget figures go in a closed purser object, and the attempt ID in the purser-attempt-id header. Mid-stream errors are passed through from the provider unmodified (H1) and are not described here.",
-  "$comment": "Cross-field rule, checked on examples by the validator: a budget denial's remaining_nanodollars is below its ceiling_nanodollars (7.6).",
+  "$comment": "Cross-field rules, checked on examples by the validator: a budget denial's remaining_nanodollars is below its ceiling_nanodollars (7.6); the body's request_id and the request-id or x-request-id header equal purser-attempt-id.",
   "type": "object",
   "required": ["protocol", "denial", "code", "status", "headers", "body"],
   "properties": {
@@ -12,12 +12,18 @@
       "enum": ["anthropic_messages", "openai_chat_completions", "openai_responses"]
     },
     "denial": {
-      "description": "budget_exceeded: a strict budget lacks room for the request's ceiling (B1, B4). policy_denied: destination policy forbids the target (C3). request_unbounded: the request's maximum cost cannot be established, so a strict budget cannot admit it (7.2, B3). upstream_unavailable: the upstream, or the budget ledger under a strict budget (B5), cannot be reached.",
-      "enum": ["budget_exceeded", "policy_denied", "request_unbounded", "upstream_unavailable"]
+      "description": "budget_exceeded: a strict budget lacks room for the request's ceiling (B1, B4). policy_denied: destination policy forbids the target (C3). budget_policy_missing: the org has no budget policy row, so reservation fails closed in strict and meter-only mode alike (spec 0.6, 7.6 and B5); a setup fault retrying cannot fix, decided before any reservation commits. request_unbounded: the request's maximum cost cannot be established, so a strict budget cannot admit it (7.2, B3). upstream_unavailable: the upstream, or the budget ledger under a strict budget (B5), cannot be reached.",
+      "enum": [
+        "budget_exceeded",
+        "policy_denied",
+        "budget_policy_missing",
+        "request_unbounded",
+        "upstream_unavailable"
+      ]
     },
     "code": {"$ref": "#/$defs/code"},
     "status": {
-      "description": "HTTP status. 429 for budget_exceeded (B4), 403 for policy_denied, 400 for request_unbounded, 503 for upstream_unavailable.",
+      "description": "HTTP status. 429 for budget_exceeded (B4), 403 for policy_denied and budget_policy_missing, 400 for request_unbounded, 503 for upstream_unavailable.",
       "enum": [400, 403, 429, 503]
     },
     "headers": {"$ref": "#/$defs/headers"},
@@ -38,8 +44,15 @@
       "then": {"properties": {"body": {"required": ["type"]}}},
       "else": {"properties": {"body": {"not": {"required": ["type"]}}}}
     },
+    {
+      "$comment": "Each protocol's native request ID header carries the attempt ID; the other protocol's header is absent.",
+      "if": {"properties": {"protocol": {"const": "anthropic_messages"}}, "required": ["protocol"]},
+      "then": {"properties": {"headers": {"required": ["request-id"], "not": {"required": ["x-request-id"]}}}},
+      "else": {"properties": {"headers": {"required": ["x-request-id"], "not": {"required": ["request-id"]}}}}
+    },
     {"$ref": "#/$defs/code_purser_budget_exceeded"},
     {"$ref": "#/$defs/code_purser_policy_denied"},
+    {"$ref": "#/$defs/code_purser_budget_policy_missing"},
     {"$ref": "#/$defs/code_purser_unbounded_unpriced_model"},
     {"$ref": "#/$defs/code_purser_unbounded_unpriced_dimension"},
     {"$ref": "#/$defs/code_purser_unbounded_missing_output_cap"},
@@ -56,6 +69,7 @@
       "enum": [
         "purser_budget_exceeded",
         "purser_policy_denied",
+        "purser_budget_policy_missing",
         "purser_unbounded_unpriced_model",
         "purser_unbounded_unpriced_dimension",
         "purser_unbounded_missing_output_cap",
@@ -72,6 +86,7 @@
       "enum": [
         "Purser budget exceeded for this window. retry-after gives the seconds until the window resets.",
         "Purser destination policy does not allow this request to reach this provider or model.",
+        "Purser has no budget policy for this organization, so it admits no requests. An org owner or a Purser operator must set one.",
         "Purser cannot bound the cost of this request: the model has no price-book entry.",
         "Purser cannot bound the cost of this request: its speed, service tier, geography, long-context tier, or a token class it can incur has no price-book rule.",
         "Purser cannot bound the cost of this request: set an output token cap (max_tokens, max_completion_tokens, or max_output_tokens).",
@@ -92,6 +107,14 @@
         "retry-after": {"$ref": "urn:purser:contracts:common:0.1.0#/$defs/delta_seconds"},
         "purser-attempt-id": {
           "description": "The ID the agent-facing explain_denial tool takes (7.8).",
+          "$ref": "urn:purser:contracts:common:0.1.0#/$defs/uuid"
+        },
+        "request-id": {
+          "description": "Anthropic's request ID header, set to the attempt ID so clients that log it record the ID explain_denial takes.",
+          "$ref": "urn:purser:contracts:common:0.1.0#/$defs/uuid"
+        },
+        "x-request-id": {
+          "description": "OpenAI's request ID header, set to the attempt ID for the same reason.",
           "$ref": "urn:purser:contracts:common:0.1.0#/$defs/uuid"
         }
       },
@@ -129,11 +152,15 @@
       ]
     },
     "anthropic_body": {
-      "description": "Anthropic Messages error body: {type: error, error: {type, message, details}}.",
+      "description": "Anthropic Messages error body: {type: error, error: {type, message, details}, request_id}.",
       "type": "object",
-      "required": ["type", "error"],
+      "required": ["type", "error", "request_id"],
       "properties": {
         "type": {"const": "error"},
+        "request_id": {
+          "description": "Anthropic's documented top-level request ID, set to the attempt ID.",
+          "$ref": "urn:purser:contracts:common:0.1.0#/$defs/uuid"
+        },
         "error": {
           "type": "object",
           "required": ["type", "message", "details"],
@@ -257,6 +284,49 @@
                       "const": "Purser destination policy does not allow this request to reach this provider or model."
                     },
                     "code": {"const": "purser_policy_denied"}
+                  }
+                }
+              },
+              "not": {"required": ["purser"]}
+            }
+          }
+        }
+      }
+    },
+    "code_purser_budget_policy_missing": {
+      "if": {"properties": {"code": {"const": "purser_budget_policy_missing"}}, "required": ["code"]},
+      "then": {
+        "properties": {
+          "denial": {"const": "budget_policy_missing"},
+          "status": {"const": 403},
+          "headers": {"not": {"required": ["retry-after"]}},
+          "body": {
+            "if": {"required": ["type"]},
+            "then": {
+              "properties": {
+                "error": {
+                  "properties": {
+                    "type": {"const": "permission_error"},
+                    "message": {
+                      "const": "Purser has no budget policy for this organization, so it admits no requests. An org owner or a Purser operator must set one."
+                    },
+                    "details": {
+                      "properties": {"error_code": {"const": "purser_budget_policy_missing"}},
+                      "not": {"required": ["purser"]}
+                    }
+                  }
+                }
+              }
+            },
+            "else": {
+              "properties": {
+                "error": {
+                  "properties": {
+                    "type": {"const": "permission_error"},
+                    "message": {
+                      "const": "Purser has no budget policy for this organization, so it admits no requests. An org owner or a Purser operator must set one."
+                    },
+                    "code": {"const": "purser_budget_policy_missing"}
                   }
                 }
               },

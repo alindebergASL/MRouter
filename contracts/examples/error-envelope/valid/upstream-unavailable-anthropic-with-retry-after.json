@@ -6,7 +6,8 @@
   "headers": {
     "content-type": "application/json",
     "purser-attempt-id": "24df6d4b-0c5a-4f1e-8b9d-4a5f6e7d8c9b",
-    "retry-after": "30"
+    "retry-after": "30",
+    "request-id": "24df6d4b-0c5a-4f1e-8b9d-4a5f6e7d8c9b"
   },
   "body": {
     "type": "error",
@@ -16,6 +17,7 @@
       "details": {
         "error_code": "purser_upstream_unavailable"
       }
-    }
+    },
+    "request_id": "24df6d4b-0c5a-4f1e-8b9d-4a5f6e7d8c9b"
   }
 }

@@ -4,6 +4,16 @@
     "keyword": "not",
     "why": "The body must be in the client's protocol so the harness parses it natively (B4)."
   },
+  "anthropic-body-without-request-id.json": {
+    "path": "/body",
+    "keyword": "required",
+    "why": "Anthropic's error body always carries a top-level request_id, and its clients expect it."
+  },
+  "anthropic-request-id-header-on-openai.json": {
+    "path": "/headers",
+    "keyword": "not",
+    "why": "Each protocol's request ID header is its own: x-request-id for OpenAI, request-id for Anthropic."
+  },
   "budget-denial-without-retry-after.json": {
     "path": "/headers",
     "keyword": "required",
@@ -13,6 +23,11 @@
     "path": "/body/error/details",
     "keyword": "not",
     "why": "Budget figures belong only to budget denials; a policy denial reveals no budget (A4)."
+  },
+  "budget-policy-missing-as-503.json": {
+    "path": "/status",
+    "keyword": "const",
+    "why": "A missing budget policy is a setup fault retrying cannot fix; clients retry 5xx, so it is a 403 (spec 0.6, B5)."
   },
   "ceiling-as-string.json": {
     "path": "/body/error/details/purser/ceiling_nanodollars",
@@ -76,6 +91,16 @@
     "path": "",
     "keyword": "semantic:budget_remaining_below_ceiling",
     "why": "A strict budget denies only when remaining is below the ceiling (7.6 step 2); otherwise the request fits."
+  },
+  "request-id-differs-from-attempt-id.json": {
+    "path": "",
+    "keyword": "semantic:request_ids_match_attempt",
+    "why": "The request ID a client logs must be the attempt ID explain_denial takes (7.8)."
+  },
+  "retry-after-on-budget-policy-missing.json": {
+    "path": "/headers",
+    "keyword": "not",
+    "why": "Retrying cannot fix a missing budget policy, so the denial never invites a retry."
   },
   "retry-after-on-unbounded-denial.json": {
     "path": "/headers",

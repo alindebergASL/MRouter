@@ -5,7 +5,8 @@
   "status": 429,
   "headers": {
     "content-type": "application/json",
-    "purser-attempt-id": "9b4c7a5e-1f6d-4c2b-9e0a-5d6c7b8a9f0e"
+    "purser-attempt-id": "9b4c7a5e-1f6d-4c2b-9e0a-5d6c7b8a9f0e",
+    "x-request-id": "9b4c7a5e-1f6d-4c2b-9e0a-5d6c7b8a9f0e"
   },
   "body": {
     "error": {

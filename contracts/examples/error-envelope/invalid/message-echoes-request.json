@@ -5,7 +5,8 @@
   "status": 400,
   "headers": {
     "content-type": "application/json",
-    "purser-attempt-id": "ce7f0d8b-4c9a-4f5e-8b3d-8a9f0e1d2c3b"
+    "purser-attempt-id": "ce7f0d8b-4c9a-4f5e-8b3d-8a9f0e1d2c3b",
+    "x-request-id": "ce7f0d8b-4c9a-4f5e-8b3d-8a9f0e1d2c3b"
   },
   "body": {
     "error": {

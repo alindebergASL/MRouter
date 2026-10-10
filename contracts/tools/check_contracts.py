@@ -519,6 +519,12 @@ def _error_envelope_rules(doc: dict[str, Any]) -> Iterator[tuple[str, str]]:
     detail = body.get("purser") or body.get("error", {}).get("details", {}).get("purser")
     if detail and detail["remaining_nanodollars"] >= detail["ceiling_nanodollars"]:
         yield "budget_remaining_below_ceiling", "a budget denial needs remaining below the ceiling (7.6)"
+    headers = doc.get("headers", {})
+    ids = {headers.get(k) for k in ("request-id", "x-request-id") if k in headers}
+    if "request_id" in body:
+        ids.add(body["request_id"])
+    if ids - {headers.get("purser-attempt-id")}:
+        yield "request_ids_match_attempt", "request_id and the request-id or x-request-id header must equal purser-attempt-id"
 
 
 def _window_ok(start: str | None, end: str | None) -> bool:

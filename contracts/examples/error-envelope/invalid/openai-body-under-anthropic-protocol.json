@@ -5,7 +5,8 @@
   "status": 403,
   "headers": {
     "content-type": "application/json",
-    "purser-attempt-id": "8a3b6f4d-0e5c-4b1a-8d9f-4c5b6a7f8e9d"
+    "purser-attempt-id": "8a3b6f4d-0e5c-4b1a-8d9f-4c5b6a7f8e9d",
+    "request-id": "8a3b6f4d-0e5c-4b1a-8d9f-4c5b6a7f8e9d"
   },
   "body": {
     "error": {

@@ -5,7 +5,8 @@
   "status": 400,
   "headers": {
     "content-type": "application/json",
-    "purser-attempt-id": "df8a1e9c-5d0b-4a6f-9c4e-9b0a1f2e3d4c"
+    "purser-attempt-id": "df8a1e9c-5d0b-4a6f-9c4e-9b0a1f2e3d4c",
+    "request-id": "df8a1e9c-5d0b-4a6f-9c4e-9b0a1f2e3d4c"
   },
   "body": {
     "type": "error",
@@ -15,6 +16,7 @@
       "details": {
         "error_code": "purser_unbounded_missing_output_cap"
       }
-    }
+    },
+    "request_id": "df8a1e9c-5d0b-4a6f-9c4e-9b0a1f2e3d4c"
   }
 }
