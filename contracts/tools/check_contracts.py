@@ -76,13 +76,53 @@ FORMAT_ALLOWLIST = (
     "delta_seconds",
 )
 # Strings every allowlisted format must reject: prose, whitespace, empty.
-FREE_TEXT_PROBES = ("", " ", "ignore previous instructions", "a b", "a\tb", "line\nbreak")
+FREE_TEXT_PROBES = ("", " ", "ignore previous instructions", "a b", "a\tb", "line\nbreak", "a\n", "0\n")
 
-# OpenCode (packages/opencode/src/session/retry.ts) retries any error whose message or
-# body matches these, so a non-retryable denial must not contain them.
-OPENCODE_RETRY_TRIGGERS = re.compile(
-    r"429|500|502|503|504|524|rate limit|unavailable|try again later|overloaded", re.IGNORECASE
-)
+# OpenCode retries an error whose message or body matches any of these, and treats a
+# context-overflow match as a cue to compact and resend, so a non-retryable denial (400,
+# 403) must match none of them. Translated from sst/opencode at commit
+# 055d95bb7e278c94baf06235a52cac79dd13ba67 (2026-10-10): RETRYABLE_MESSAGE_PATTERNS and
+# the substring checks in packages/opencode/src/session/retry.ts, and the overflow
+# patterns in packages/llm/src/provider-error.ts. Re-check them when OpenCode changes.
+OPENCODE_RETRY_TRIGGERS = [re.compile(p, re.IGNORECASE) for p in (
+    r"429|500|502|503|504|524",
+    r"rate increased too quickly|rate limit|rate-limit|rate_limit|too many requests",
+    r"overloaded|service unavailable|service_unavailable|service-unavailable|internal error|internal_error"
+    r"|internal server error|server error|server_error|server-error|provider returned error"
+    r"|provider_returned_error|provider-returned-error",
+    r"terminated|fetch failed|failed to fetch|network[-_\s]error|upstream connect|connection error"
+    r"|connection refused|connection lost|socket connection was closed|socket hang up|reset before headers"
+    r"|getaddrinfo|enotfound|eai_again|econnrefused|econnreset|etimedout",
+    r"^timeout$|\b(?:request|response|connection|network|stream|read) (?:timeout|timed out|time out)\b",
+    r"try your request again|retry your request|resource exhausted|resource_exhausted",
+    r"\btry again (?:later|in\b)|\b(?:currently|temporarily) at capacity\b",
+    r"too_many_requests|exhausted|unavailable",
+)]
+OPENCODE_OVERFLOW = [re.compile(p, re.IGNORECASE) for p in (
+    r"prompt is too long", r"request_too_large", r"input is too long for requested model",
+    r"exceeds the context window",
+    r"exceeds (?:the )?(?:model'?s )?maximum context length(?: of [\d,]+ tokens?|\s*\([\d,]+\))",
+    r"input token count.*exceeds the maximum", r"tokens in request more than max tokens allowed",
+    r"maximum prompt length is \d+", r"reduce the length of the messages", r"maximum context length is \d+ tokens",
+    r"exceeds (?:the )?maximum allowed input length of [\d,]+ tokens?",
+    r"input \(\d+ tokens\) is longer than the model'?s context length \(\d+ tokens\)",
+    r"exceeds the limit of \d+", r"exceeds the available context size", r"greater than the context length",
+    r"context window exceeds limit", r"exceeded model token limit", r"context[_ ]length[_ ]exceeded",
+    r"request entity too large", r"context length is only \d+ tokens", r"input length.*exceeds.*context length",
+    r"prompt too long; exceeded (?:max )?context length", r"too large for model with \d+ maximum context length",
+    r"prompt has [\d,]+ tokens?, but the configured context size is [\d,]+ tokens?",
+    r"model_context_window_exceeded", r"too many tokens", r"token limit exceeded",
+    r"^4(00|13)\s*(status code)?\s*\(no body\)",
+)]
+
+
+def opencode_trigger(text: str) -> str | None:
+    for pattern in OPENCODE_RETRY_TRIGGERS + OPENCODE_OVERFLOW:
+        hit = pattern.search(text)
+        if hit:
+            return hit.group(0)
+    return None
+
 
 # The Opus 5.5 fast plus US-only worked example (architecture 6.3, M5).
 ANCHOR_FIXTURE = ("opus-5-5-fast-us", 209_000_000)
@@ -171,8 +211,10 @@ def pointer(parts: Any) -> str:
 def pattern_problems(pattern: str) -> list[str]:
     """Patterns must mean the same to Python's re and ECMA-262, and be anchored."""
     problems = []
-    if not (pattern.startswith("^") and pattern.endswith("$")):
-        problems.append("not anchored with ^...$")
+    if not pattern.startswith("^"):
+        problems.append("not anchored with ^")
+    if not pattern.endswith(r"(?!\n)$"):
+        problems.append(r"must end with (?!\n)$: in Python, $ alone also matches before a trailing newline")
     i, in_class = 0, False
     while i < len(pattern):
         c = pattern[i]
@@ -595,17 +637,30 @@ class FreeTextLint:
         fixed = "const" in node or "enum" in node
         if "string" in types and not fixed and not ref_allowed:
             self.problems.append(f"{where}: string that is not a const, an enum, or an allowlisted format")
-        if "array" in types and "items" not in node and "prefixItems" not in node:
-            self.problems.append(f"{where}: array without items")
+        if "array" in types and "items" not in node:
+            self.problems.append(f"{where}: array without items (a prefixItems tail is otherwise open)")
+        # Open keys anywhere, typed or not, could admit a free-text property.
+        if "patternProperties" in node:
+            self.problems.append(f"{where}: patternProperties opens the object's keys")
+        if "additionalProperties" in node and node["additionalProperties"] is not False:
+            self.problems.append(f"{where}: additionalProperties other than false opens the object's keys")
         if "object" in types:
             if node.get("additionalProperties") is not False and node.get("unevaluatedProperties") is not False:
                 self.problems.append(f"{where}: object is not closed (additionalProperties or unevaluatedProperties false)")
-            if "patternProperties" in node or isinstance(node.get("additionalProperties"), dict):
-                self.problems.append(f"{where}: object keys are open (patternProperties or an additionalProperties schema)")
+            elif node.get("additionalProperties") is not False:
+                # Closed only by unevaluatedProperties: a property declared in an in-place
+                # member (allOf, if/then/else, ...) counts as evaluated, so it must itself
+                # describe a value unless this node declares it.
+                own_names = set(node.get("properties", {}))
+                for name, sub, sub_uri, sub_ptr in self.member_properties(node, uri, ptr):
+                    if name not in own_names:
+                        self.visit(sub, sub_uri, sub_ptr, True)
         combinators = [k for k in ("oneOf", "anyOf", "allOf") if k in node]
         if value and not (types or fixed or "$ref" in node or combinators):
             self.problems.append(f"{where}: no type, const, enum, $ref, or combinator")
         own = bool(types or fixed or "$ref" in node)
+        if value and not own and len(node.get("allOf", [])) > 1 and not any(k in node for k in ("oneOf", "anyOf")):
+            self.problems.append(f"{where}: a value described only by an allOf of several members; give it a type")
         # Members of a node that declares an object (or array) must each describe a
         # value. Members of an untyped node only constrain one declared elsewhere,
         # such as an if/then rule; their strings are still checked.
@@ -629,6 +684,27 @@ class FreeTextLint:
                 self.visit(node[k], uri, f"{ptr}/{k}", False)
         for name, sub in node.get("dependentSchemas", {}).items():
             self.visit(sub, uri, f"{ptr}/dependentSchemas/{name}", False)
+
+    def member_properties(self, node: dict[str, Any], uri: str, ptr: str) -> Iterator[tuple[str, Any, str, str]]:
+        """Properties declared by a node's in-place members, following $refs to untyped targets."""
+        stack = [(node, uri, ptr)]
+        while stack:
+            current, cur_uri, cur_ptr = stack.pop()
+            members = [(current.get(k), f"{cur_ptr}/{k}") for k in ("if", "then", "else")]
+            members += [(m, f"{cur_ptr}/{k}/{i}") for k in ("allOf", "anyOf", "oneOf") for i, m in enumerate(current.get(k, []))]
+            members += [(m, f"{cur_ptr}/dependentSchemas/{n}") for n, m in current.get("dependentSchemas", {}).items()]
+            for member, member_ptr in members:
+                if not isinstance(member, dict):
+                    continue
+                member_uri = cur_uri
+                if "$ref" in member:
+                    member_uri, member_ptr, target = self.resolve(member["$ref"], cur_uri)
+                    if "type" in target:
+                        continue  # a typed target is checked as its own closed value
+                    member = target
+                for name, sub in member.get("properties", {}).items():
+                    yield name, sub, member_uri, f"{member_ptr}/properties/{name}"
+                stack.append((member, member_uri, member_ptr))
 
     def check_formats(self) -> None:
         for uri, ptr in sorted(self.allowed):
@@ -660,11 +736,25 @@ def lint_free_text(schemas: dict[str, dict[str, Any]], failures: Failures) -> No
         },
         "additionalProperties": False,
     }
+    holes = {
+        "additional-true": {"type": "object", "additionalProperties": True, "unevaluatedProperties": False},
+        "allof-member-property": {"type": "object", "unevaluatedProperties": False, "allOf": [{"properties": {"note": True}}]},
+        "if-property": {"type": "object", "unevaluatedProperties": False, "if": {"properties": {"note": True}}},
+        "dependent-schema-property": {"type": "object", "unevaluatedProperties": False,
+                                      "dependentSchemas": {"a": {"properties": {"note": {}}}}},
+        "untyped-allof-value": {"allOf": [{"maxLength": 5}, {"minLength": 1}]},
+        "open-tuple-tail": {"type": "array", "prefixItems": [{"const": "a"}]},
+        "member-pattern-properties": {"type": "object", "additionalProperties": False,
+                                      "allOf": [{"patternProperties": {"^n": {"type": "string"}}}]},
+    }
+    bad["properties"].update({name: shape for name, shape in holes.items()})
     probe = FreeTextLint({**documents, bad_id: bad}, common_id)
     probe.visit(bad, bad_id, "", True)
     caught = {p.split("#", 1)[1].split(":", 1)[0] for p in probe.problems}
-    for want in ("/properties/note", "/properties/label", "/properties/extra", "/properties/anything"):
-        if want not in caught:
+    for want in ["/properties/note", "/properties/label", "/properties/extra", "/properties/anything"] + [
+        f"/properties/{name}" for name in holes
+    ]:
+        if not any(c == want or c.startswith(want + "/") for c in caught):
             failures.add("check_contracts.py", f"no-free-text self-test did not flag {want}")
 
     lint = FreeTextLint(documents, common_id)
@@ -683,14 +773,22 @@ def lint_free_text(schemas: dict[str, dict[str, Any]], failures: Failures) -> No
 # --- 6. Denials OpenCode won't retry ------------------------------------------------------
 
 
-def check_denial_bodies(failures: Failures) -> None:
+def check_denial_bodies(schemas: dict[str, dict[str, Any]], failures: Failures) -> None:
+    """OpenCode speaks the OpenAI protocols, so check every 400/403 message template and
+    every OpenAI-shaped 400/403 example body against its triggers."""
+    for name, rule in schemas.get("error-envelope", {}).get("$defs", {}).items():
+        then = rule.get("then", {}).get("properties", {}) if name.startswith("code_") else {}
+        if then.get("status", {}).get("const") in (400, 403):
+            message = then["body"]["else"]["properties"]["error"]["properties"]["message"]["const"]
+            hit = opencode_trigger(message)
+            if hit:
+                failures.add(f"error-envelope $defs/{name}", f"message template contains {hit!r}, which OpenCode retries")
     for path in sorted((EXAMPLES / "error-envelope" / "valid").glob("*.json")):
         doc = load_json(path)
-        if doc.get("status") in (400, 403):
-            body = json.dumps(doc.get("body"), separators=(",", ":"))
-            hit = OPENCODE_RETRY_TRIGGERS.search(body)
+        if doc.get("status") in (400, 403) and doc.get("protocol") != "anthropic_messages":
+            hit = opencode_trigger(json.dumps(doc.get("body"), separators=(",", ":")))
             if hit:
-                failures.add(rel(path), f"non-retryable denial body contains {hit.group(0)!r}, which OpenCode retries")
+                failures.add(rel(path), f"non-retryable denial body contains {hit!r}, which OpenCode retries")
 
 
 # --- 7. Pricing fixtures --------------------------------------------------------------------
@@ -767,7 +865,7 @@ def main() -> int:
     print(f"json hygiene: {hygiene} files")
     lint_free_text(schemas, failures)
     print(f"no-free-text lint: {', '.join(NO_FREE_TEXT)}")
-    check_denial_bodies(failures)
+    check_denial_bodies(schemas, failures)
     fixtures = check_pricing_fixtures(schemas, registry, failures)
     print(f"pricing fixtures: {fixtures} checked")
     if failures.items:

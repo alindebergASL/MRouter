@@ -114,13 +114,17 @@
           "if": {"properties": {"window": {"const": "day"}}, "required": ["window"]},
           "then": {
             "properties": {
-              "window_resets_at": {"pattern": "^[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])T00:00:00Z$"}
+              "window_resets_at": {
+                "pattern": "^[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])T00:00:00Z(?!\\n)$"
+              }
             }
           }
         },
         {
           "if": {"properties": {"window": {"const": "month"}}, "required": ["window"]},
-          "then": {"properties": {"window_resets_at": {"pattern": "^[0-9]{4}-(0[1-9]|1[0-2])-01T00:00:00Z$"}}}
+          "then": {
+            "properties": {"window_resets_at": {"pattern": "^[0-9]{4}-(0[1-9]|1[0-2])-01T00:00:00Z(?!\\n)$"}}
+          }
         }
       ]
     },
@@ -181,7 +185,7 @@
           "status": {"const": 429},
           "headers": {
             "required": ["retry-after"],
-            "properties": {"retry-after": {"pattern": "^[1-9][0-9]{0,6}$"}}
+            "properties": {"retry-after": {"pattern": "^[1-9][0-9]{0,6}(?!\\n)$"}}
           },
           "body": {
             "if": {"required": ["type"]},

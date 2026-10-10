@@ -7,77 +7,77 @@
     "schema_version": {
       "description": "Version of the contract an instance conforms to. Any 0.1.x instance is valid under the 0.1.0 schemas.",
       "type": "string",
-      "pattern": "^0\\.1\\.(0|[1-9][0-9]{0,5})$",
+      "pattern": "^0\\.1\\.(0|[1-9][0-9]{0,5})(?!\\n)$",
       "maxLength": 12
     },
     "uuid": {
       "description": "Lowercase RFC 9562 UUID text form. Used for attempt, decision, and event IDs.",
       "type": "string",
       "format": "uuid",
-      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?!\\n)$",
       "maxLength": 36
     },
     "id": {
       "description": "Opaque identifier (org, workspace, team, user, device, virtual key, route, window, session, prompt, provider request, price-book version, key, fee). Letters, digits, and . _ : - only: no whitespace, so it cannot hold prose.",
       "type": "string",
-      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*(?!\\n)$",
       "maxLength": 128
     },
     "model_id": {
       "description": "Provider model identifier, such as claude-opus-5-5 or anthropic/claude-opus-5-5 (OpenRouter). Adds / @ + to the id alphabet.",
       "type": "string",
-      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:/@+-]*$",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:/@+-]*(?!\\n)$",
       "maxLength": 160
     },
     "semver": {
       "description": "Dotted numeric version with an optional pre-release suffix, such as 2.1.285 or 0.48.0-beta.1.",
       "type": "string",
-      "pattern": "^(0|[1-9][0-9]{0,8})\\.(0|[1-9][0-9]{0,8})\\.(0|[1-9][0-9]{0,8})(-[0-9A-Za-z-]{1,32}([.][0-9A-Za-z-]{1,32}){0,4})?$",
+      "pattern": "^(0|[1-9][0-9]{0,8})\\.(0|[1-9][0-9]{0,8})\\.(0|[1-9][0-9]{0,8})(-[0-9A-Za-z-]{1,32}([.][0-9A-Za-z-]{1,32}){0,4})?(?!\\n)$",
       "maxLength": 128
     },
     "hmac_hex": {
       "description": "Lowercase hex HMAC-SHA256 digest.",
       "type": "string",
-      "pattern": "^[0-9a-f]{64}$",
+      "pattern": "^[0-9a-f]{64}(?!\\n)$",
       "maxLength": 64
     },
     "rfc3339_utc": {
       "description": "RFC 3339 timestamp in UTC with a Z suffix and up to nanosecond precision. The pattern enforces it; format is an annotation only.",
       "type": "string",
       "format": "date-time",
-      "pattern": "^[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])T([01][0-9]|2[0-3]):[0-5][0-9]:([0-5][0-9]|60)([.][0-9]{1,9})?Z$",
+      "pattern": "^[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])T([01][0-9]|2[0-3]):[0-5][0-9]:([0-5][0-9]|60)([.][0-9]{1,9})?Z(?!\\n)$",
       "maxLength": 30
     },
     "date": {
       "description": "Calendar date, RFC 3339 full-date.",
       "type": "string",
       "format": "date",
-      "pattern": "^[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])$",
+      "pattern": "^[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])(?!\\n)$",
       "maxLength": 10
     },
     "decimal": {
       "description": "Exact non-negative decimal as a string (architecture 6.4): rates in USD per million tokens, multipliers, fees, and USD amounts. No sign, exponent, or leading zeros. Never a JSON number.",
       "type": "string",
-      "pattern": "^(0|[1-9][0-9]{0,17})([.][0-9]{1,18})?$",
+      "pattern": "^(0|[1-9][0-9]{0,17})([.][0-9]{1,18})?(?!\\n)$",
       "maxLength": 37
     },
     "probability": {
       "description": "Exact decimal probability in [0, 1] as a string.",
       "type": "string",
-      "pattern": "^(0([.][0-9]{1,18})?|1([.]0{1,18})?)$",
+      "pattern": "^(0([.][0-9]{1,18})?|1([.]0{1,18})?)(?!\\n)$",
       "maxLength": 20
     },
     "delta_seconds": {
       "description": "Non-negative integer seconds as an HTTP header value (retry-after, RFC 9110 delay-seconds).",
       "type": "string",
-      "pattern": "^(0|[1-9][0-9]{0,9})$",
+      "pattern": "^(0|[1-9][0-9]{0,9})(?!\\n)$",
       "maxLength": 10
     },
     "https_url": {
       "description": "Absolute https URL, used only for dated price sources. Not allowed in event schemas.",
       "type": "string",
       "format": "uri",
-      "pattern": "^https://[A-Za-z0-9-]+([.][A-Za-z0-9-]+)+(/[A-Za-z0-9._~%/:@!$&'()*+,;=?#-]*)?$",
+      "pattern": "^https://[A-Za-z0-9-]+([.][A-Za-z0-9-]+)+(/[A-Za-z0-9._~%/:@!$&'()*+,;=?#-]*)?(?!\\n)$",
       "maxLength": 2048
     },
     "nanodollars": {
