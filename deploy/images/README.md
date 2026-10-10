@@ -8,4 +8,10 @@ gcr.io, pinned by digest; multi-arch (`linux/amd64`, `linux/arm64`); non-root; r
 filesystem with declared `tmpfs` mounts only; no shell or package manager at runtime; no
 credentials in any layer; the image holds the same binary as the native release (D1).
 
-Nothing here yet.
+| Image | Dockerfile | Runtime base |
+|---|---|---|
+| Control plane API | `controlplane/Dockerfile` | `gcr.io/distroless/python3-debian13:nonroot`, pinned |
+
+`make check-pins` also checks every `FROM` line here. `scripts/check-image-d2.sh` runs the D2
+checks this lane can run (non-root, no shell or package manager, read-only, no canary in any
+layer); SBOMs, signing, and the vulnerability gate are Lane A's.

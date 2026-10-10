@@ -48,8 +48,13 @@ def _reset_on_checkin(dbapi_connection: Any, connection_record: Any) -> None:
 
 class Database:
     def __init__(self, url: str, *, pool_size: int = 5) -> None:
+        # hide_parameters: bound values (emails, names) never reach logs or errors.
         self.engine: Engine = create_engine(
-            url, pool_pre_ping=True, pool_size=pool_size, max_overflow=pool_size
+            url,
+            pool_pre_ping=True,
+            pool_size=pool_size,
+            max_overflow=pool_size,
+            hide_parameters=True,
         )
         event.listen(self.engine, "checkin", _reset_on_checkin)
         self.sessions: sessionmaker[Session] = sessionmaker(self.engine, expire_on_commit=False)

@@ -9,7 +9,8 @@ SHELL_SCRIPTS := $(wildcard scripts/*.sh .claude/hooks/*.sh)
 .DEFAULT_GOAL := help
 .PHONY: help dev-up dev-down dev-reset dev-ps dev-logs dev-psql dev-check dev-token \
         check-pins check-hooks lint test images \
-        cp-sync cp-lock cp-lint cp-fmt cp-test-unit cp-test cp-migrate
+        cp-sync cp-lock cp-lint cp-fmt cp-test-unit cp-test cp-migrate \
+        cp-image cp-image-check dev-up-app
 
 help: ## List targets
 	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  %-12s %s\n", $$1, $$2}'
@@ -66,6 +67,20 @@ cp-test: ## Control plane: every test, against the dev stack (make dev-up first)
 
 cp-migrate: ## Control plane: migrate the dev database to head (as the owner role)
 	$(CP_TOOLS) migrate
+
+CP_IMAGE ?= purser-controlplane:dev
+# A variable, because the comma would split $(if ...)'s arguments.
+CA_BUILD_SECRET := --secret id=egress-ca,src=$(EGRESS_CA)
+
+cp-image: ## Control plane: build the image (deploy/images/controlplane/Dockerfile)
+	docker build -f deploy/images/controlplane/Dockerfile -t $(CP_IMAGE) \
+	  $(if $(EGRESS_CA),$(CA_BUILD_SECRET)) .
+
+cp-image-check: ## Control plane: D2 checks on the built image (needs make dev-up)
+	scripts/check-image-d2.sh $(CP_IMAGE) "$${PURSER_BUILD_CANARY:-}"
+
+dev-up-app: ## Start the dev stack plus the control plane (API on 127.0.0.1:58180)
+	$(COMPOSE) --profile app up -d --build --wait --wait-timeout 300
 
 check-pins: ## Every Compose image is pinned by digest and pre-pulled by cloud-setup.sh
 	scripts/check-image-pins.sh

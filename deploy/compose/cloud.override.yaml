@@ -14,6 +14,20 @@ x-egress-ca: &egress-ca
     REQUESTS_CA_BUNDLE: /etc/purser/egress-ca.crt
     NODE_EXTRA_CA_CERTS: /etc/purser/egress-ca.crt
 
+x-build-with-ca: &build-with-ca
+  build:
+    context: ../..
+    dockerfile: deploy/images/controlplane/Dockerfile
+    secrets: [egress-ca]
+
 services:
   cp-tools: *egress-ca
   cp-tools-solo: *egress-ca
+  # The image build fetches wheels from PyPI; the CA is a build secret only.
+  controlplane-migrate: *build-with-ca
+  controlplane: *build-with-ca
+  controlplane-sweeper: *build-with-ca
+
+secrets:
+  egress-ca:
+    file: /root/.ccr/ca-bundle.crt

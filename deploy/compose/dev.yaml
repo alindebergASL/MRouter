@@ -36,6 +36,35 @@ x-cp-tools: &cp-tools
     PURSER_KEYCLOAK_CLIENT_ID: purser-controlplane
     PURSER_KEYCLOAK_CLIENT_SECRET: controlplane-dev-only-not-a-secret
 
+x-controlplane: &controlplane
+  # The control-plane image (deploy/images/controlplane/Dockerfile), run the
+  # way production runs it: non-root, read-only root filesystem, a tmpfs at
+  # /tmp only, no capabilities. Started by `make dev-up-app`, not `make dev-up`.
+  build:
+    context: ../..
+    dockerfile: deploy/images/controlplane/Dockerfile
+  profiles: ["app"]
+  user: "65532:65532"
+  read_only: true
+  tmpfs:
+    - /tmp
+  cap_drop: ["ALL"]
+  security_opt: ["no-new-privileges:true"]
+  environment:
+    # Development-only credentials. Not secrets; never reuse them anywhere else.
+    # Production injects these from AWS Secrets Manager (ADR 0003).
+    PURSER_ENV: dev
+    PURSER_DB_URL: postgresql+psycopg://purser_cp_app:cp-app-dev-only-not-a-secret@postgres:5432/purser_dev
+    PURSER_DB_SWEEPER_URL: postgresql+psycopg://purser_cp_sweeper:cp-sweeper-dev-only-not-a-secret@postgres:5432/purser_dev
+    PURSER_DB_OWNER_URL: postgresql+psycopg://purser_cp_owner:cp-owner-dev-only-not-a-secret@postgres:5432/purser_dev
+    PURSER_OIDC_ISSUER: http://localhost:58080/realms/purser-dev
+    # Backchannel: the issuer's public URL isn't reachable from this container.
+    PURSER_OIDC_DISCOVERY_URL: http://keycloak:58080/realms/purser-dev/.well-known/openid-configuration
+    PURSER_KEYCLOAK_URL: http://keycloak:58080
+    PURSER_KEYCLOAK_REALM: purser-dev
+    PURSER_KEYCLOAK_CLIENT_ID: purser-controlplane
+    PURSER_KEYCLOAK_CLIENT_SECRET: controlplane-dev-only-not-a-secret
+
 services:
   postgres:
     # Production major version (Amazon RDS for PostgreSQL 18). See ADR 0002.
@@ -156,6 +185,44 @@ services:
     # (locking, lint, unit tests, the Stop hook).
     <<: *cp-tools
     profiles: ["tools"]
+
+  controlplane-migrate:
+    # One-shot: migrate the schema as the owner role, then apply the dev seed.
+    <<: *controlplane
+    command: ["-c", "from purser_controlplane.__main__ import main; main(['migrate']); main(['dev-seed'])"]
+    depends_on:
+      controlplane-db-init:
+        condition: service_completed_successfully
+    restart: "no"
+
+  controlplane:
+    # The admin API on 127.0.0.1:58180.
+    <<: *controlplane
+    ports:
+      - "127.0.0.1:58180:8080"
+    depends_on:
+      controlplane-migrate:
+        condition: service_completed_successfully
+      keycloak:
+        condition: service_healthy
+    healthcheck:
+      # No shell or curl in the image: ask its own Python.
+      test: ["CMD", "/usr/bin/python3", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/readyz', timeout=2)"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 30s
+      start_interval: 1s
+
+  controlplane-sweeper:
+    # Finishes or rolls back rows left pending by a failed Keycloak call.
+    <<: *controlplane
+    command: ["-m", "purser_controlplane", "sweep"]
+    depends_on:
+      controlplane-migrate:
+        condition: service_completed_successfully
+      keycloak:
+        condition: service_healthy
 
 volumes:
   pgdata:
