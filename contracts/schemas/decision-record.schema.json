@@ -1,0 +1,349 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:purser:contracts:decision-record:0.1.0",
+  "title": "Routing decision record",
+  "description": "One routing decision, recorded so it can be replayed (architecture 8.5, change 1; R1). It holds the policy version, the input features, the decision model's ID and version, that model's output, the chosen target, and the episode. Replaying recorded input features and decision-model outputs under the same policy version must reproduce the chosen target. Proxy decisions and harness-hook recommendations for the same request share decision_id (8.2), so the record is keyed by decision_id and actuator. In v1, decisions on stage, classifier, escalation, and random-split routes are shadow only and never change what is sent upstream (R2). Every field is an identifier, enum, count, or exact decimal: the record holds no prompt or response text (C2), and the decision model's output is stored only as its structured answer.",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "decision_id",
+    "actuator",
+    "decided_at",
+    "mode",
+    "policy_version",
+    "episode",
+    "attempt_id",
+    "route",
+    "input_features",
+    "decision_model",
+    "decision_model_output",
+    "chosen_target",
+    "escalation",
+    "experiment_arm"
+  ],
+  "properties": {
+    "schema_version": {"$ref": "urn:purser:contracts:common:0.1.0#/$defs/schema_version"},
+    "decision_id": {"$ref": "urn:purser:contracts:common:0.1.0#/$defs/uuid"},
+    "actuator": {
+      "description": "proxy: the router chooses the model at the relay or sidecar. harness_hook: a model recommended inside the harness before a task's first request (8.2).",
+      "enum": ["proxy", "harness_hook"]
+    },
+    "decided_at": {"$ref": "urn:purser:contracts:common:0.1.0#/$defs/rfc3339_utc"},
+    "mode": {
+      "description": "live: the decision changed traffic (passthrough and tier-alias routes only in v1, 8.1). shadow: computed and logged without acting on it.",
+      "enum": ["live", "shadow"]
+    },
+    "policy_version": {"$ref": "urn:purser:contracts:common:0.1.0#/$defs/id"},
+    "episode": {"$ref": "#/$defs/episode"},
+    "attempt_id": {
+      "description": "The upstream attempt the decision was made for; null for a hook recommendation made before any request.",
+      "oneOf": [{"$ref": "urn:purser:contracts:common:0.1.0#/$defs/uuid"}, {"type": "null"}]
+    },
+    "route": {
+      "type": "object",
+      "required": ["route_id", "route_type"],
+      "properties": {
+        "route_id": {"$ref": "urn:purser:contracts:common:0.1.0#/$defs/id"},
+        "route_type": {"$ref": "urn:purser:contracts:common:0.1.0#/$defs/route_type"}
+      },
+      "additionalProperties": false
+    },
+    "input_features": {"$ref": "#/$defs/input_features"},
+    "decision_model": {
+      "description": "The pinned decision model (8.5, change 2); null when the route makes no model call, as for passthrough, tier-alias, and stage routes.",
+      "oneOf": [{"$ref": "#/$defs/decision_model"}, {"type": "null"}]
+    },
+    "decision_model_output": {
+      "description": "The decision model's raw output, as its structured answer; null exactly when decision_model is null. Free-text output is never stored (open question 5 in the PR).",
+      "oneOf": [{"$ref": "#/$defs/decision_output"}, {"type": "null"}]
+    },
+    "chosen_target": {
+      "type": "object",
+      "required": ["provider", "model", "tier"],
+      "properties": {
+        "provider": {"$ref": "urn:purser:contracts:common:0.1.0#/$defs/provider"},
+        "model": {"$ref": "urn:purser:contracts:common:0.1.0#/$defs/model_id"},
+        "tier": {
+          "description": "The policy's tier name (for example fast or deep); null when the route has no tiers.",
+          "oneOf": [{"$ref": "urn:purser:contracts:common:0.1.0#/$defs/id"}, {"type": "null"}]
+        }
+      },
+      "additionalProperties": false
+    },
+    "escalation": {
+      "description": "For an escalation route, the estimated cache re-warm cost its decision includes (8.5, change 5) and the price-book version that priced the estimate; null for every other route.",
+      "oneOf": [{"$ref": "#/$defs/escalation_estimate"}, {"type": "null"}]
+    },
+    "experiment_arm": {
+      "description": "For a random-split route, the arm this episode was assigned (8.4; 8.5, change 6). Assignment is per episode and a deterministic function of the episode, route_id, and policy_version, so replay reproduces it (R1); null for every other route.",
+      "oneOf": [
+        {
+          "type": "object",
+          "required": ["arm"],
+          "properties": {"arm": {"$ref": "urn:purser:contracts:common:0.1.0#/$defs/id"}},
+          "additionalProperties": false
+        },
+        {"type": "null"}
+      ]
+    }
+  },
+  "additionalProperties": false,
+  "allOf": [
+    {
+      "$comment": "A decision model and its output are recorded together or not at all.",
+      "if": {"properties": {"decision_model": {"type": "null"}}, "required": ["decision_model"]},
+      "then": {"properties": {"decision_model_output": {"type": "null"}}},
+      "else": {"properties": {"decision_model_output": {"$ref": "#/$defs/decision_output"}}}
+    },
+    {
+      "$comment": "Only passthrough and tier-alias routes change traffic in v1 (8.1, R2).",
+      "if": {
+        "properties": {
+          "route": {
+            "properties": {"route_type": {"enum": ["stage", "classifier", "escalation", "random_split"]}},
+            "required": ["route_type"]
+          }
+        },
+        "required": ["route"]
+      },
+      "then": {"properties": {"mode": {"const": "shadow"}}}
+    },
+    {
+      "$comment": "Hook recommendations are shadow-only in v1 and precede any request (8.2); proxy decisions belong to an attempt.",
+      "if": {"properties": {"actuator": {"const": "harness_hook"}}, "required": ["actuator"]},
+      "then": {"properties": {"mode": {"const": "shadow"}, "attempt_id": {"type": "null"}}},
+      "else": {"properties": {"attempt_id": {"$ref": "urn:purser:contracts:common:0.1.0#/$defs/uuid"}}}
+    },
+    {
+      "$comment": "Passthrough, tier-alias, stage, and random-split routes make no model call (8.1; 8.5, lift 4); a classifier route always does.",
+      "if": {
+        "properties": {
+          "route": {
+            "properties": {"route_type": {"enum": ["passthrough", "tier_alias", "stage", "random_split"]}},
+            "required": ["route_type"]
+          }
+        },
+        "required": ["route"]
+      },
+      "then": {"properties": {"decision_model": {"type": "null"}}}
+    },
+    {
+      "if": {
+        "properties": {
+          "route": {"properties": {"route_type": {"enum": ["classifier"]}}, "required": ["route_type"]}
+        },
+        "required": ["route"]
+      },
+      "then": {"properties": {"decision_model": {"$ref": "#/$defs/decision_model"}}}
+    },
+    {
+      "$comment": "Only an escalation decision carries the re-warm estimate (8.5, change 5).",
+      "if": {
+        "properties": {
+          "route": {"properties": {"route_type": {"enum": ["escalation"]}}, "required": ["route_type"]}
+        },
+        "required": ["route"]
+      },
+      "then": {"properties": {"escalation": {"$ref": "#/$defs/escalation_estimate"}}},
+      "else": {"properties": {"escalation": {"type": "null"}}}
+    },
+    {
+      "$comment": "Only a random-split decision assigns an experiment arm.",
+      "if": {
+        "properties": {
+          "route": {"properties": {"route_type": {"const": "random_split"}}, "required": ["route_type"]}
+        },
+        "required": ["route"]
+      },
+      "then": {"properties": {"experiment_arm": {"not": {"type": "null"}}}},
+      "else": {"properties": {"experiment_arm": {"type": "null"}}}
+    }
+  ],
+  "$defs": {
+    "episode": {
+      "description": "The unit an 8.4 experiment measures and decisions stay sticky for: a harness session, a harness prompt, or a WorkAgent assignment and run.",
+      "oneOf": [
+        {
+          "type": "object",
+          "required": ["kind", "session_id"],
+          "properties": {
+            "kind": {"const": "harness_session"},
+            "session_id": {"$ref": "urn:purser:contracts:common:0.1.0#/$defs/id"}
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": ["kind", "session_id", "prompt_id"],
+          "properties": {
+            "kind": {"const": "harness_prompt"},
+            "session_id": {"$ref": "urn:purser:contracts:common:0.1.0#/$defs/id"},
+            "prompt_id": {"$ref": "urn:purser:contracts:common:0.1.0#/$defs/id"}
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": ["kind", "assignment_id", "run_id"],
+          "properties": {
+            "kind": {"const": "workagent_run"},
+            "assignment_id": {"$ref": "urn:purser:contracts:common:0.1.0#/$defs/id"},
+            "run_id": {"$ref": "urn:purser:contracts:common:0.1.0#/$defs/id"}
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "feature_evidence": {
+      "description": "Features are read from the request the router handled or derived exactly from it.",
+      "enum": ["measured", "inferred", "unavailable"]
+    },
+    "feature_count": {
+      "allOf": [{"$ref": "urn:purser:contracts:common:0.1.0#/$defs/evidenced_count"}],
+      "properties": {"evidence": {"$ref": "#/$defs/feature_evidence"}}
+    },
+    "input_features": {
+      "description": "The closed v0 feature set (8.2): harness hints and zero-cost stage signals already in the conversation. Adding a feature is a schema change, so a feature can never carry text.",
+      "type": "object",
+      "required": [
+        "request_class",
+        "requested_model",
+        "turn_index",
+        "context_tokens",
+        "tool_calls_in_context",
+        "tool_errors_in_context",
+        "consecutive_bad_turns"
+      ],
+      "properties": {
+        "request_class": {
+          "description": "Harness hint for the request's role, such as Claude Code's request class (8.2); unknown when the harness gives none.",
+          "enum": ["main", "subagent", "compaction", "auxiliary", "unknown"]
+        },
+        "requested_model": {
+          "description": "The model or alias the client asked for.",
+          "$ref": "urn:purser:contracts:common:0.1.0#/$defs/model_id"
+        },
+        "turn_index": {"$ref": "#/$defs/feature_count"},
+        "context_tokens": {"$ref": "#/$defs/feature_count"},
+        "tool_calls_in_context": {"$ref": "#/$defs/feature_count"},
+        "tool_errors_in_context": {"$ref": "#/$defs/feature_count"},
+        "consecutive_bad_turns": {"$ref": "#/$defs/feature_count"}
+      },
+      "additionalProperties": false
+    },
+    "decision_model": {
+      "type": "object",
+      "required": ["provider", "model_id", "model_version", "call_attempt_id"],
+      "properties": {
+        "provider": {"$ref": "urn:purser:contracts:common:0.1.0#/$defs/provider"},
+        "model_id": {"$ref": "urn:purser:contracts:common:0.1.0#/$defs/model_id"},
+        "model_version": {
+          "description": "The exact pinned version the policy names (8.5, change 2).",
+          "$ref": "urn:purser:contracts:common:0.1.0#/$defs/id"
+        },
+        "call_attempt_id": {
+          "description": "The metered attempt for the decision-model call (8.5, change 4). A decision held by episode affinity (8.1; 8.5, lift 3) repeats the episode's original decision_model and decision_model_output and carries that call's call_attempt_id, so the record replays on its own (R1) and the call is metered once. null only when the output was replayed offline from a record.",
+          "oneOf": [{"$ref": "urn:purser:contracts:common:0.1.0#/$defs/uuid"}, {"type": "null"}]
+        }
+      },
+      "additionalProperties": false
+    },
+    "decision_output": {
+      "description": "The decision model's answer as a tagged union, after Switchyard's decision protocol: a boolean, a choice among option IDs, or a position on an ordered score scale, with probabilities as exact decimals. provider_confidence is kept apart because its scale is provider-specific.",
+      "oneOf": [
+        {
+          "type": "object",
+          "required": ["type", "value", "probability_true", "provider_confidence"],
+          "properties": {
+            "type": {"const": "boolean"},
+            "value": {"type": ["boolean", "null"]},
+            "probability_true": {
+              "oneOf": [{"$ref": "urn:purser:contracts:common:0.1.0#/$defs/probability"}, {"type": "null"}]
+            },
+            "provider_confidence": {"$ref": "#/$defs/provider_confidence"}
+          },
+          "additionalProperties": false,
+          "anyOf": [
+            {"properties": {"value": {"type": "boolean"}}},
+            {
+              "properties": {
+                "probability_true": {"$ref": "urn:purser:contracts:common:0.1.0#/$defs/probability"}
+              }
+            }
+          ]
+        },
+        {
+          "type": "object",
+          "required": ["type", "selected", "probabilities", "provider_confidence"],
+          "properties": {
+            "type": {"const": "choice"},
+            "selected": {"$ref": "urn:purser:contracts:common:0.1.0#/$defs/id"},
+            "probabilities": {
+              "type": "array",
+              "maxItems": 32,
+              "items": {
+                "type": "object",
+                "required": ["option", "probability"],
+                "properties": {
+                  "option": {"$ref": "urn:purser:contracts:common:0.1.0#/$defs/id"},
+                  "probability": {"$ref": "urn:purser:contracts:common:0.1.0#/$defs/probability"}
+                },
+                "additionalProperties": false
+              },
+              "uniqueItems": true,
+              "description": "One entry per option, in the order the policy lists them."
+            },
+            "provider_confidence": {"$ref": "#/$defs/provider_confidence"}
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": ["type", "value", "probabilities", "provider_confidence"],
+          "properties": {
+            "type": {"const": "score"},
+            "value": {
+              "description": "Position on the policy's ordered scale, from 0; may be fractional.",
+              "$ref": "urn:purser:contracts:common:0.1.0#/$defs/decimal"
+            },
+            "probabilities": {
+              "description": "Probability of each scale level, lowest first; empty when not reported.",
+              "type": "array",
+              "maxItems": 32,
+              "items": {"$ref": "urn:purser:contracts:common:0.1.0#/$defs/probability"}
+            },
+            "provider_confidence": {"$ref": "#/$defs/provider_confidence"}
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "provider_confidence": {
+      "description": "A provider-reported confidence, as an exact decimal; null when not reported.",
+      "oneOf": [{"$ref": "urn:purser:contracts:common:0.1.0#/$defs/decimal"}, {"type": "null"}]
+    },
+    "escalation_estimate": {
+      "type": "object",
+      "required": ["estimated_rewarm_cost", "price_book_version"],
+      "properties": {
+        "estimated_rewarm_cost": {"$ref": "#/$defs/feature_nanodollars"},
+        "price_book_version": {"$ref": "urn:purser:contracts:common:0.1.0#/$defs/id"}
+      },
+      "additionalProperties": false
+    },
+    "feature_nanodollars": {
+      "description": "An estimated amount in nano-dollars with its evidence; unavailable with a reason when it could not be estimated, never 0.",
+      "type": "object",
+      "required": ["value", "evidence"],
+      "properties": {
+        "value": {
+          "oneOf": [{"$ref": "urn:purser:contracts:common:0.1.0#/$defs/nanodollars"}, {"type": "null"}]
+        },
+        "evidence": {"enum": ["inferred", "unavailable"]},
+        "unavailable_reason": {"enum": ["unpriced", "not_reported"]}
+      },
+      "additionalProperties": false,
+      "allOf": [{"$ref": "urn:purser:contracts:common:0.1.0#/$defs/evidence_rules"}]
+    }
+  }
+}

@@ -1,0 +1,22 @@
+{
+  "above-int64.json": {
+    "path": "",
+    "keyword": "maximum",
+    "why": "Money fits a signed 64-bit integer (6.4)."
+  },
+  "as-float.json": {
+    "path": "",
+    "keyword": "parse:float",
+    "why": "Money is never a float, even an integral one (6.4)."
+  },
+  "as-string.json": {
+    "path": "",
+    "keyword": "type",
+    "why": "Nano-dollars are a JSON integer, not a string."
+  },
+  "negative.json": {
+    "path": "",
+    "keyword": "minimum",
+    "why": "Money amounts here are never negative; use signed_nanodollars where an overrun can make them so."
+  }
+}

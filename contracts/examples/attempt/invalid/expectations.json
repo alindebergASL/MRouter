@@ -1,0 +1,97 @@
+{
+  "ceiling-as-json-float.json": {
+    "path": "",
+    "keyword": "parse:float",
+    "why": "The ceiling is written as a float dollar amount; money is integer nano-dollars and never a JSON float (6.4)."
+  },
+  "ceiling-charge-below-ceiling.json": {
+    "path": "",
+    "keyword": "semantic:ceiling_charge_equals_ceiling",
+    "why": "A ceiling charge bills the full ceiling (7.5); charging less would let a charge fall below true cost (B1)."
+  },
+  "ceiling-charge-on-unbounded-attempt.json": {
+    "path": "/ceiling_nanodollars",
+    "keyword": "type",
+    "why": "A ceiling charge needs a ceiling to charge; an unbounded attempt has none, so charging it would settle at zero."
+  },
+  "ceiling-charge-without-unknown.json": {
+    "path": "/transitions",
+    "keyword": "contains",
+    "why": "A ceiling charge settles only an attempt whose path went through unknown (7.5); this one claims a timeout but its transitions go straight from dispatched to settled."
+  },
+  "ceiling-null-without-reason.json": {
+    "path": "",
+    "keyword": "required",
+    "why": "A null ceiling must carry ceiling_unavailable_reason, so an unbounded attempt is never mistaken for a missing value."
+  },
+  "cost-as-usd-decimal-string.json": {
+    "path": "/settlement/cost_nanodollars",
+    "keyword": "type",
+    "why": "Settled cost is integer nano-dollars, not a USD decimal string (6.4)."
+  },
+  "free-text-in-settlement.json": {
+    "path": "/settlement",
+    "keyword": "additionalProperties",
+    "why": "A settlement is closed: no field can carry prompt or response text (C2)."
+  },
+  "free-text-in-transition-record.json": {
+    "path": "/transitions/0",
+    "keyword": "additionalProperties",
+    "why": "A transition record is closed: no field can carry prompt or response text (C2)."
+  },
+  "free-text-note-at-root.json": {
+    "path": "",
+    "keyword": "additionalProperties",
+    "why": "The attempt record is closed and holds no free text, so a note field could carry prompt content (C2)."
+  },
+  "missing-org-id.json": {
+    "path": "",
+    "keyword": "required",
+    "why": "The ledger takes the org explicitly from the authenticated identity and settlement checks it (spec 0.6, 7.6)."
+  },
+  "missing-price-book-version.json": {
+    "path": "",
+    "keyword": "required",
+    "why": "Every attempt records the price-book version effective when its reservation committed, which prices it (P1)."
+  },
+  "negative-ceiling.json": {
+    "path": "/ceiling_nanodollars",
+    "keyword": "minimum",
+    "why": "A negative ceiling would add headroom instead of holding it, breaking the B1 admission check."
+  },
+  "overrun-not-flagged.json": {
+    "path": "",
+    "keyword": "semantic:overrun_matches_cost",
+    "why": "Cost above the ceiling is an invariant breach that must be flagged and paged (7.6), never hidden."
+  },
+  "released-without-release-reason.json": {
+    "path": "",
+    "keyword": "required",
+    "why": "Releasing a ceiling is only allowed when the upstream connection failed before any byte was sent, and the record must say so (7.5)."
+  },
+  "reserved-with-transitions.json": {
+    "path": "/transitions",
+    "keyword": "maxItems",
+    "why": "A reserved attempt has taken no transitions; one that was dispatched cannot still claim to be reserved."
+  },
+  "settled-without-settlement.json": {
+    "path": "",
+    "keyword": "required",
+    "why": "A settled attempt must say how its cost was established, or the cost added to spent has no basis (7.5, 7.6)."
+  },
+  "settlement-on-unknown-attempt.json": {
+    "path": "",
+    "keyword": "not",
+    "why": "An unknown attempt keeps its ceiling reserved; a settlement belongs only to a settled attempt, or the cost would be counted while the ceiling is still held."
+  },
+  "unbounded-ceiling-given-as-zero.json": {
+    "path": "",
+    "keyword": "not",
+    "why": "An unbounded attempt's ceiling is unavailable, which is null with a reason, never zero."
+  },
+  "upstream-error-with-cost.json": {
+    "path": "/settlement/cost_nanodollars",
+    "keyword": "const",
+    "why": "An error before any output began is charged 0; billed partial output settles from partial stream usage instead."
+  }
+}

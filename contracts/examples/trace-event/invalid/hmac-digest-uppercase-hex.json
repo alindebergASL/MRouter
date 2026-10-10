@@ -1,0 +1,73 @@
+{
+  "schema_version": "0.1.0",
+  "event_id": "9b4f7d56-87c6-4a38-b6aa-d504734d87ed",
+  "org_id": "org_acme",
+  "user_id": "user_017",
+  "device_id": "dev_mbp_017",
+  "harness": "claude-code",
+  "harness_version": {
+    "value": "2.1.285",
+    "evidence": "measured"
+  },
+  "reader": {
+    "id": "trace-reader.claude-code",
+    "version": "0.3.1"
+  },
+  "trace_format": "claude-code.jsonl.v3",
+  "session_id": {
+    "value": "7d0c9e2a-41b6-4f3e-8a5d-2c9b1e0f7a34",
+    "evidence": "measured"
+  },
+  "model": {
+    "value": "claude-opus-5-5",
+    "evidence": "measured"
+  },
+  "occurred_at": {
+    "value": "2026-10-08T14:03:27.512Z",
+    "evidence": "measured"
+  },
+  "observed_at": "2026-10-08T14:03:29Z",
+  "tokens": {
+    "uncached_input": {
+      "value": 3000,
+      "evidence": "measured"
+    },
+    "cache_read": {
+      "value": 90000,
+      "evidence": "measured"
+    },
+    "cache_write_5m": {
+      "value": 5000,
+      "evidence": "measured"
+    },
+    "cache_write_1h": {
+      "value": 0,
+      "evidence": "measured"
+    },
+    "cache_write_unspecified": {
+      "value": 0,
+      "evidence": "inferred"
+    },
+    "output": {
+      "value": 2000,
+      "evidence": "measured"
+    },
+    "reasoning": {
+      "value": null,
+      "evidence": "unavailable",
+      "unavailable_reason": "not_reported"
+    },
+    "cache_write_total": {
+      "value": 5000,
+      "evidence": "measured"
+    }
+  },
+  "provider_message_id_hmac": {
+    "value": {
+      "algorithm": "hmac-sha256",
+      "key_id": "hmackey_org_acme_2026q4",
+      "digest": "0E2F5E271FA0FBE8E41DCDC791E70BC6E064972E181E41E39A46589A47BE5BDD"
+    },
+    "evidence": "measured"
+  }
+}

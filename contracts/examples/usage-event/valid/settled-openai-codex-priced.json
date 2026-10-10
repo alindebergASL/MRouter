@@ -1,0 +1,126 @@
+{
+  "schema_version": "0.1.0",
+  "attempt_id": "a4f7cf93-e6c8-4b7a-95ba-c8d9e7f7f52c",
+  "revision": 1,
+  "recorded_at": "2026-10-08T21:10:41.902Z",
+  "state": "settled",
+  "dispatched_at": "2026-10-08T21:10:20.311Z",
+  "settled_at": "2026-10-08T21:10:41.877Z",
+  "identity": {
+    "org_id": "org_acme",
+    "workspace_id": "ws_main",
+    "team_id": "team_platform",
+    "user_id": "user_023",
+    "device_id": "dev_0057",
+    "virtual_key_id": null,
+    "harness": "codex",
+    "initiator": "harness"
+  },
+  "correlation": {
+    "session_id": {
+      "value": "e6c9f1b5-08ea-4d9c-a7dc-eafb09b9b73d",
+      "evidence": "measured"
+    },
+    "prompt_id": {
+      "value": null,
+      "evidence": "unavailable",
+      "unavailable_reason": "not_reported"
+    },
+    "provider_request_id": {
+      "value": "req_synthetic_j10",
+      "evidence": "measured"
+    },
+    "provider_message_id_hmac": {
+      "value": {
+        "algorithm": "hmac-sha256",
+        "key_id": "hk_org_acme_2026q4",
+        "digest": "d158a19066ea688f369b2a8900417e418c50f75f68cefb957b342f1f20ddb3c6"
+      },
+      "evidence": "measured"
+    },
+    "retry_of_attempt_id": null
+  },
+  "routing": {
+    "provider": "openai",
+    "model": "gpt-6.1-sol",
+    "route_id": "route_codex_default",
+    "route_type": "passthrough",
+    "data_path": "relay",
+    "price_book_version": "pb_2026-09-01.1",
+    "shadow_decision_id": null
+  },
+  "dimensions": {
+    "speed": {
+      "value": null,
+      "unavailable_reason": "not_applicable"
+    },
+    "service_tier": {
+      "value": "default"
+    },
+    "inference_geo": {
+      "value": "global"
+    },
+    "long_context_applied": {
+      "value": false
+    }
+  },
+  "tokens": {
+    "uncached_input": {
+      "value": 12000,
+      "evidence": "inferred"
+    },
+    "cache_read": {
+      "value": 40000,
+      "evidence": "measured"
+    },
+    "cache_write_5m": {
+      "value": null,
+      "evidence": "unavailable",
+      "unavailable_reason": "not_applicable"
+    },
+    "cache_write_1h": {
+      "value": null,
+      "evidence": "unavailable",
+      "unavailable_reason": "not_applicable"
+    },
+    "cache_write_unspecified": {
+      "value": 0,
+      "evidence": "measured"
+    },
+    "output": {
+      "value": 3000,
+      "evidence": "measured"
+    },
+    "reasoning": {
+      "value": 1200,
+      "evidence": "measured"
+    },
+    "cache_write_total": {
+      "value": null,
+      "evidence": "unavailable",
+      "unavailable_reason": "not_applicable"
+    }
+  },
+  "fees": [],
+  "computed_cost": {
+    "nanodollars": 58000000,
+    "evidence": "inferred",
+    "basis": "usage"
+  },
+  "provider_billed_cost": {
+    "nanodollars": null,
+    "evidence": "unavailable",
+    "unavailable_reason": "pending_reconciliation"
+  },
+  "timing": {
+    "ttfb_ms": {
+      "value": 1180,
+      "evidence": "measured"
+    },
+    "duration_ms": {
+      "value": 21566,
+      "evidence": "measured"
+    }
+  },
+  "flags": []
+}

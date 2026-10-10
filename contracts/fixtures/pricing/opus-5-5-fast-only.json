@@ -1,0 +1,54 @@
+{
+  "schema_version": "0.1.0",
+  "fixture_id": "opus-5-5-fast-only",
+  "referenced_by": [
+    "M5",
+    "M2"
+  ],
+  "price_book": {
+    "path": "price-book.example.json",
+    "price_book_version": "2026-10-10.1",
+    "entry_id": "anthropic.claude-opus-5-5"
+  },
+  "request": {
+    "provider": "anthropic",
+    "model": "claude-opus-5-5",
+    "at": "2026-10-10T12:00:00Z",
+    "org_id": null,
+    "dimensions": {
+      "speed": "fast",
+      "service_tier": null,
+      "inference_geo": "global"
+    }
+  },
+  "usage": {
+    "tokens": {
+      "uncached_input": 1000,
+      "cache_read": 0,
+      "cache_write_5m": 0,
+      "cache_write_1h": 0,
+      "cache_write_unspecified": 0,
+      "output": 500
+    },
+    "fees": []
+  },
+  "expected": {
+    "priced": true,
+    "rounding": "half_up",
+    "classes": {
+      "uncached_input": {
+        "tokens": 1000,
+        "rate_usd_per_mtok": "8",
+        "cost_usd": "0.008"
+      },
+      "output": {
+        "tokens": 500,
+        "rate_usd_per_mtok": "40",
+        "cost_usd": "0.02"
+      }
+    },
+    "fees": [],
+    "total_usd": "0.028",
+    "total_nanodollars": 28000000
+  }
+}

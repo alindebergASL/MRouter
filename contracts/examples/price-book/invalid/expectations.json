@@ -1,0 +1,72 @@
+{
+  "default-value-missing.json": {
+    "path": "/entries/0/rules/3/default_value",
+    "keyword": "type",
+    "why": "when_omitted default_value needs the provider's default; without it an omitted value would be guessed."
+  },
+  "dimension-value-listed-twice.json": {
+    "path": "",
+    "keyword": "semantic:dimension_values_distinct",
+    "why": "A value listed twice with different multipliers makes the rate depend on lookup order (6.3, M5)."
+  },
+  "entry-missing-source.json": {
+    "path": "/entries/0",
+    "keyword": "required",
+    "why": "Every entry needs a dated provider source so the pricing-auditor can verify it."
+  },
+  "fee-token-multipliers-apply.json": {
+    "path": "/entries/0/rules/1/token_multipliers_apply",
+    "keyword": "const",
+    "why": "Per-use fees are added after token cost and never multiplied (7.4), so token_multipliers_apply must be false."
+  },
+  "input-bound-k-as-float.json": {
+    "path": "",
+    "keyword": "parse:float",
+    "why": "k is an exact decimal string; a float bound could round below the true count (7.3, B1)."
+  },
+  "input-bound-k-zero.json": {
+    "path": "/entries/0/input_bound/k",
+    "keyword": "not",
+    "why": "A zero k would bound input by the per-message overhead alone, so the ceiling could fall below the true maximum (7.3, B1)."
+  },
+  "negative-multiplier.json": {
+    "path": "/entries/0/rules/1/values/1/multiplier",
+    "keyword": "pattern",
+    "why": "A negative multiplier would make cost negative and let a ceiling fall below true cost (B1); decimals are unsigned."
+  },
+  "no-base-rates-rule.json": {
+    "path": "/entries/0/rules",
+    "keyword": "contains",
+    "why": "An entry without a base_rates rule has nothing to fall back to outside the promotion window, so it is rejected rather than priced as zero."
+  },
+  "nonzero-fee-without-cap.json": {
+    "path": "/entries/1/rules/3/max_uses_parameter",
+    "keyword": "type",
+    "why": "A request that can incur a non-zero fee is bounded only if its uses are capped (7.2 item 3, B3)."
+  },
+  "rate-as-json-number.json": {
+    "path": "",
+    "keyword": "parse:float",
+    "why": "A rate written as the JSON number 0.5 would be parsed as a binary float, so money could lose exactness (6.4)."
+  },
+  "rate-with-exponent.json": {
+    "path": "/entries/0/rules/0/rates/uncached_input",
+    "keyword": "pattern",
+    "why": "Exact decimals are plain digits with an optional fraction; exponent notation such as 5e-1 is rejected so every consumer parses the same value."
+  },
+  "rule-missing-source.json": {
+    "path": "/entries/0/rules/0",
+    "keyword": "required",
+    "why": "Every rule needs its own dated source; a base_rates rule without one matches no rule type."
+  },
+  "two-base-rates-rules.json": {
+    "path": "/entries/0/rules",
+    "keyword": "maxContains",
+    "why": "An entry with two base_rates rules is ambiguous about which rates apply, so exactly one is allowed."
+  },
+  "unknown-rule-type.json": {
+    "path": "/entries/0/rules/1/type",
+    "keyword": "const",
+    "why": "A rule type outside the seven in 6.3 has no defined place in the stacking order, so it matches no rule."
+  }
+}

@@ -1,0 +1,60 @@
+{
+  "schema_version": "0.1.0",
+  "decision_id": "f6d7e8f9-a0b1-4c23-9d4e-5f6a7b8c9d0e",
+  "actuator": "proxy",
+  "decided_at": "2026-10-08T16:40:31.250Z",
+  "mode": "shadow",
+  "policy_version": "policy_v12",
+  "episode": {
+    "kind": "workagent_run",
+    "assignment_id": "asg_2291"
+  },
+  "attempt_id": "17e8f9a0-b1c2-4d34-8e5f-6a7b8c9d0e1f",
+  "route": {
+    "route_id": "route_workagent_classifier",
+    "route_type": "classifier"
+  },
+  "input_features": {
+    "request_class": "unknown",
+    "requested_model": "anthropic/claude-sonnet-4-5",
+    "turn_index": {
+      "value": 4,
+      "evidence": "measured"
+    },
+    "context_tokens": {
+      "value": 27650,
+      "evidence": "measured"
+    },
+    "tool_calls_in_context": {
+      "value": 7,
+      "evidence": "measured"
+    },
+    "tool_errors_in_context": {
+      "value": 1,
+      "evidence": "measured"
+    },
+    "consecutive_bad_turns": {
+      "value": 0,
+      "evidence": "measured"
+    }
+  },
+  "decision_model": {
+    "provider": "local",
+    "model_id": "router-judge-small",
+    "model_version": "rjs-2026-09-15",
+    "call_attempt_id": "28f9a0b1-c2d3-4e45-9f6a-7b8c9d0e1f2a"
+  },
+  "decision_model_output": {
+    "type": "boolean",
+    "value": null,
+    "probability_true": "0.64",
+    "provider_confidence": null
+  },
+  "escalation": null,
+  "experiment_arm": null,
+  "chosen_target": {
+    "provider": "openrouter",
+    "model": "anthropic/claude-opus-5-5",
+    "tier": "deep"
+  }
+}

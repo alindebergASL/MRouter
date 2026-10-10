@@ -1,0 +1,22 @@
+{
+  "protocol": "anthropic_messages",
+  "denial": "request_unbounded",
+  "code": "purser_unbounded_unpriced_model",
+  "status": 400,
+  "headers": {
+    "content-type": "application/json",
+    "purser-attempt-id": "ac5d8b6f-2a7e-4d3c-8f1b-6e7d8c9b0a1f",
+    "request-id": "ac5d8b6f-2a7e-4d3c-8f1b-6e7d8c9b0a1f"
+  },
+  "body": {
+    "type": "error",
+    "error": {
+      "type": "invalid_request_error",
+      "message": "Purser cannot bound the cost of this request: the model has no price-book entry.",
+      "details": {
+        "error_code": "purser_unbounded_unpriced_model"
+      }
+    },
+    "request_id": "ac5d8b6f-2a7e-4d3c-8f1b-6e7d8c9b0a1f"
+  }
+}

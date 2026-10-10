@@ -1,0 +1,20 @@
+{
+  "protocol": "openai_chat_completions",
+  "denial": "upstream_unavailable",
+  "code": "purser_ledger_unavailable",
+  "status": 503,
+  "headers": {
+    "content-type": "application/json",
+    "purser-attempt-id": "46fb8f6d-2e7c-4b3a-8d1f-6c7b8a9f0e1d",
+    "retry-after": "5",
+    "x-request-id": "46fb8f6d-2e7c-4b3a-8d1f-6c7b8a9f0e1d"
+  },
+  "body": {
+    "error": {
+      "message": "Purser's budget ledger is unavailable, so strict budgets are failing closed. Retry later.",
+      "type": "server_error",
+      "param": null,
+      "code": "purser_ledger_unavailable"
+    }
+  }
+}

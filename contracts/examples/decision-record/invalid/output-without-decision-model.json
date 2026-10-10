@@ -1,0 +1,65 @@
+{
+  "schema_version": "0.1.0",
+  "decision_id": "c3a4b5c6-d7e8-4f90-8a1b-2c3d4e5f6a7b",
+  "actuator": "proxy",
+  "decided_at": "2026-10-08T15:22:47.006Z",
+  "mode": "shadow",
+  "policy_version": "policy_v12",
+  "episode": {
+    "kind": "harness_session",
+    "session_id": "sess_5d20c4"
+  },
+  "attempt_id": "d4b5c6d7-e8f9-4a01-9b2c-3d4e5f6a7b8c",
+  "route": {
+    "route_id": "route_main_escalation",
+    "route_type": "escalation"
+  },
+  "input_features": {
+    "request_class": "main",
+    "requested_model": "claude-sonnet-4-5",
+    "turn_index": {
+      "value": 9,
+      "evidence": "measured"
+    },
+    "context_tokens": {
+      "value": 96210,
+      "evidence": "measured"
+    },
+    "tool_calls_in_context": {
+      "value": 22,
+      "evidence": "measured"
+    },
+    "tool_errors_in_context": {
+      "value": 4,
+      "evidence": "measured"
+    },
+    "consecutive_bad_turns": {
+      "value": 2,
+      "evidence": "measured"
+    }
+  },
+  "decision_model": null,
+  "decision_model_output": {
+    "type": "score",
+    "value": "1.6",
+    "probabilities": [
+      "0.08",
+      "0.24",
+      "0.68"
+    ],
+    "provider_confidence": null
+  },
+  "escalation": {
+    "estimated_rewarm_cost": {
+      "value": 625000000,
+      "evidence": "inferred"
+    },
+    "price_book_version": "pb_2026-09-01.1"
+  },
+  "experiment_arm": null,
+  "chosen_target": {
+    "provider": "anthropic",
+    "model": "claude-opus-5-5",
+    "tier": "deep"
+  }
+}

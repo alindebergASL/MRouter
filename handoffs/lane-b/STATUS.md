@@ -13,6 +13,12 @@ Scope: Ledger SQL, attempt state machine, price-book schema and Python oracle, a
    own error code when there is none, never admitting on zero rows (spec 7.6). B5's test now
    includes that case. The ledger tables have no row-level security in v1 (spec 4).
 
+## Inputs from other lanes
+- Lane A, contracts v0 (in review): `contracts/schemas/attempt.schema.json` (the 7.5 state machine and
+  transition table as data), `price-book.schema.json` and `price-fixture.schema.json`, and `contracts/fixtures/pricing/`
+  with the Opus 5.5 book and the $0.209 fixture. Lane B task 3 builds the oracle and the full fixture set on these;
+  schema changes go through a spec-change pull request.
+
 ## Blocked
 - Nothing.
 

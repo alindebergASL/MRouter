@@ -1,0 +1,22 @@
+{
+  "empty.json": {
+    "path": "",
+    "keyword": "pattern",
+    "why": "An identifier is never empty."
+  },
+  "has-space.json": {
+    "path": "",
+    "keyword": "pattern",
+    "why": "Identifiers admit no whitespace, so they cannot carry prose (C2)."
+  },
+  "prose.json": {
+    "path": "",
+    "keyword": "pattern",
+    "why": "Prose is rejected by the identifier alphabet (C2)."
+  },
+  "too-long.json": {
+    "path": "",
+    "keyword": "maxLength",
+    "why": "Identifiers are at most 128 characters."
+  }
+}

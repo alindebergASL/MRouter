@@ -1,0 +1,54 @@
+{
+  "schema_version": "0.1.0",
+  "decision_id": "a1e2d3c4-b5a6-4978-8a9b-0c1d2e3f4a5b",
+  "actuator": "proxy",
+  "decided_at": "2026-10-08T14:01:05.112Z",
+  "mode": "live",
+  "policy_version": "policy_v12",
+  "episode": {
+    "kind": "harness_session",
+    "session_id": "sess_5d20c4"
+  },
+  "attempt_id": "b2f3e4d5-c6b7-4a89-9bac-1d2e3f4a5b6c",
+  "route": {
+    "route_id": "route_opus_passthrough",
+    "route_type": "passthrough"
+  },
+  "input_features": {
+    "request_class": "main",
+    "requested_model": "claude-opus-5-5",
+    "turn_index": {
+      "value": 3,
+      "evidence": "measured"
+    },
+    "context_tokens": {
+      "value": 41207,
+      "evidence": "measured"
+    },
+    "tool_calls_in_context": {
+      "value": 5,
+      "evidence": "measured"
+    },
+    "tool_errors_in_context": {
+      "value": 0,
+      "evidence": "measured"
+    },
+    "consecutive_bad_turns": {
+      "value": 0,
+      "evidence": "measured"
+    },
+    "files_in_context": {
+      "value": 4,
+      "evidence": "measured"
+    }
+  },
+  "decision_model": null,
+  "decision_model_output": null,
+  "escalation": null,
+  "experiment_arm": null,
+  "chosen_target": {
+    "provider": "anthropic",
+    "model": "claude-opus-5-5",
+    "tier": null
+  }
+}

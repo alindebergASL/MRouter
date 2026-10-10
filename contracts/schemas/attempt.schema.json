@@ -1,0 +1,318 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:purser:contracts:attempt:0.1.0",
+  "title": "Upstream attempt",
+  "description": "One upstream attempt and its reservation (architecture 7.4 to 7.6). An attempt exists only after its reservation transaction commits (B2), so every record starts in reserved. The allowed transitions are exactly those in $defs/transition (7.5), and transitions lists the ones taken, oldest first: each state has exactly one path from reserved, and the settlement basis fixes which path a settled attempt took. A reservation belongs to the windows it was made in, even if settlement happens after rollover (7.6). Ceilings and costs are integer nano-dollars; the ceiling is rounded up (6.4). Rules JSON Schema cannot express are listed under $comment at the root and checked on examples by contracts/tools/check_contracts.py.",
+  "$comment": "Cross-field rules, checked on examples by the validator: a ceiling_charge settles at exactly ceiling_nanodollars; overrun is true exactly when cost_nanodollars exceeds a non-null ceiling; retry_of_attempt_id differs from attempt_id; transition times are non-decreasing and not before reserved_at.",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "attempt_id",
+    "org_id",
+    "state",
+    "reserved_at",
+    "ceiling_nanodollars",
+    "budget_window_ids",
+    "price_book_version",
+    "retry_of_attempt_id",
+    "transitions"
+  ],
+  "properties": {
+    "schema_version": {"$ref": "urn:purser:contracts:common:0.1.0#/$defs/schema_version"},
+    "attempt_id": {"$ref": "urn:purser:contracts:common:0.1.0#/$defs/uuid"},
+    "org_id": {
+      "description": "The org the attempt is for, taken from the authenticated identity. The ledger functions take it as an explicit argument and never infer it from the rows found (spec 0.6, sections 4 and 7.6); settlement checks it.",
+      "$ref": "urn:purser:contracts:common:0.1.0#/$defs/id"
+    },
+    "state": {"$ref": "#/$defs/state"},
+    "reserved_at": {
+      "description": "When the reservation transaction committed.",
+      "$ref": "urn:purser:contracts:common:0.1.0#/$defs/rfc3339_utc"
+    },
+    "ceiling_nanodollars": {
+      "description": "The reservation ceiling (7.4), rounded up to the next nano-dollar. Null only for an unbounded request admitted under meter-only budgets, with ceiling_unavailable_reason (open question 3 in the PR).",
+      "oneOf": [{"$ref": "urn:purser:contracts:common:0.1.0#/$defs/nanodollars"}, {"type": "null"}]
+    },
+    "ceiling_unavailable_reason": {"enum": ["unbounded_meter_only"]},
+    "budget_window_ids": {
+      "description": "The budget-window rows the reservation was made against, in ascending ID order, the order they were locked (7.6).",
+      "type": "array",
+      "maxItems": 64,
+      "uniqueItems": true,
+      "items": {"$ref": "urn:purser:contracts:common:0.1.0#/$defs/id"}
+    },
+    "price_book_version": {
+      "description": "The price-book version effective when the reservation committed; this attempt is priced with it (P1).",
+      "$ref": "urn:purser:contracts:common:0.1.0#/$defs/id"
+    },
+    "retry_of_attempt_id": {
+      "description": "The attempt this relay retry repeats; null when it is not a retry. A retry is its own attempt with its own reservation (7.2).",
+      "oneOf": [{"$ref": "urn:purser:contracts:common:0.1.0#/$defs/uuid"}, {"type": "null"}]
+    },
+    "transitions": {
+      "description": "Transitions taken, oldest first: the path from reserved to the current state ($defs/path_*).",
+      "type": "array",
+      "maxItems": 3,
+      "items": {"$ref": "#/$defs/transition_record"}
+    },
+    "release_reason": {
+      "description": "Why a reserved attempt was released: the upstream connection failed before any request byte was sent (7.5).",
+      "enum": ["upstream_connect_failed"]
+    },
+    "unknown_reason": {
+      "description": "Why the outcome became uncertain after dispatch (7.5). upstream_error_after_output: the provider sent an error after output had begun, so part of the response may be billed; it settles from partial stream usage, or by ceiling charge if none was reported. Kept after an unknown attempt settles.",
+      "enum": [
+        "stream_interrupted",
+        "client_disconnect",
+        "relay_crash",
+        "timeout",
+        "upstream_error_after_output"
+      ]
+    },
+    "settlement": {"$ref": "#/$defs/settlement"}
+  },
+  "additionalProperties": false,
+  "allOf": [
+    {
+      "$comment": "The ceiling is null exactly when its reason is given.",
+      "if": {"properties": {"ceiling_nanodollars": {"type": "null"}}, "required": ["ceiling_nanodollars"]},
+      "then": {"required": ["ceiling_unavailable_reason"]},
+      "else": {"not": {"required": ["ceiling_unavailable_reason"]}}
+    },
+    {
+      "$comment": "reserved: nothing has happened since the reservation committed.",
+      "if": {"properties": {"state": {"const": "reserved"}}, "required": ["state"]},
+      "then": {"properties": {"transitions": {"maxItems": 0}}}
+    },
+    {
+      "if": {"properties": {"state": {"const": "dispatched"}}, "required": ["state"]},
+      "then": {"properties": {"transitions": {"$ref": "#/$defs/path_dispatched"}}}
+    },
+    {
+      "if": {"properties": {"state": {"const": "released"}}, "required": ["state"]},
+      "then": {
+        "properties": {"transitions": {"$ref": "#/$defs/path_released"}},
+        "required": ["release_reason"]
+      },
+      "else": {"not": {"required": ["release_reason"]}}
+    },
+    {
+      "if": {"properties": {"state": {"const": "unknown"}}, "required": ["state"]},
+      "then": {
+        "properties": {"transitions": {"$ref": "#/$defs/path_unknown"}},
+        "required": ["unknown_reason"]
+      }
+    },
+    {
+      "$comment": "unknown_reason belongs only to an attempt that is or was unknown.",
+      "if": {"required": ["unknown_reason"]},
+      "then": {"properties": {"state": {"enum": ["unknown", "settled"]}}}
+    },
+    {
+      "$comment": "A settled attempt took one of the two settled paths and has a settlement.",
+      "if": {"properties": {"state": {"const": "settled"}}, "required": ["state"]},
+      "then": {
+        "required": ["settlement"],
+        "properties": {
+          "transitions": {
+            "oneOf": [
+              {"$ref": "#/$defs/path_settled_from_response"},
+              {"$ref": "#/$defs/path_settled_from_unknown"}
+            ]
+          }
+        }
+      },
+      "else": {"not": {"required": ["settlement"]}}
+    },
+    {
+      "$comment": "Usage from the response the relay handled, or an error before any output, settles directly from dispatched.",
+      "if": {
+        "properties": {
+          "settlement": {
+            "properties": {"basis": {"enum": ["response_usage", "upstream_error"]}},
+            "required": ["basis"]
+          }
+        },
+        "required": ["settlement"]
+      },
+      "then": {
+        "properties": {
+          "transitions": {
+            "not": {"contains": {"properties": {"to": {"const": "unknown"}}, "required": ["to"]}}
+          }
+        },
+        "not": {"required": ["unknown_reason"]}
+      }
+    },
+    {
+      "$comment": "Partial stream usage, provider usage matched by request ID, and the ceiling charge resolve an unknown attempt (7.5).",
+      "if": {
+        "properties": {
+          "settlement": {
+            "properties": {
+              "basis": {"enum": ["partial_stream_usage", "provider_usage_by_request_id", "ceiling_charge"]}
+            },
+            "required": ["basis"]
+          }
+        },
+        "required": ["settlement"]
+      },
+      "then": {
+        "properties": {
+          "transitions": {"contains": {"properties": {"to": {"const": "unknown"}}, "required": ["to"]}}
+        },
+        "required": ["unknown_reason"]
+      }
+    },
+    {
+      "$comment": "A ceiling charge needs a ceiling to charge, and charging exactly the ceiling cannot overrun it.",
+      "if": {
+        "properties": {
+          "settlement": {"properties": {"basis": {"const": "ceiling_charge"}}, "required": ["basis"]}
+        },
+        "required": ["settlement"]
+      },
+      "then": {
+        "properties": {
+          "ceiling_nanodollars": {"$ref": "urn:purser:contracts:common:0.1.0#/$defs/nanodollars"},
+          "settlement": {
+            "properties": {
+              "cost_nanodollars": {"$ref": "urn:purser:contracts:common:0.1.0#/$defs/nanodollars"},
+              "overrun": {"const": false}
+            }
+          }
+        }
+      }
+    },
+    {
+      "$comment": "An unbounded attempt has no ceiling to overrun, and only it may settle without a cost.",
+      "if": {"properties": {"ceiling_nanodollars": {"type": "null"}}, "required": ["ceiling_nanodollars"]},
+      "then": {"properties": {"settlement": {"properties": {"overrun": {"const": false}}}}},
+      "else": {
+        "properties": {
+          "settlement": {
+            "properties": {
+              "cost_nanodollars": {"$ref": "urn:purser:contracts:common:0.1.0#/$defs/nanodollars"}
+            }
+          }
+        }
+      }
+    },
+    {
+      "$comment": "An error before any output is charged nothing and cannot overrun.",
+      "if": {
+        "properties": {
+          "settlement": {"properties": {"basis": {"const": "upstream_error"}}, "required": ["basis"]}
+        },
+        "required": ["settlement"]
+      },
+      "then": {
+        "properties": {
+          "settlement": {"properties": {"cost_nanodollars": {"const": 0}, "overrun": {"const": false}}}
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "state": {
+      "description": "reserved: the reservation transaction committed; the ceiling is added to reserved on every applicable window. dispatched: the first byte was sent upstream. released: the upstream connection failed before any request byte was sent; the ceiling is released. settled: usage was obtained from the response or by reconciliation; the ceiling is released and the actual cost added to spent. unknown: the outcome is uncertain after dispatch; the ceiling stays reserved (7.5).",
+      "enum": ["reserved", "dispatched", "released", "settled", "unknown"]
+    },
+    "transition": {
+      "description": "One allowed state change (7.5). reserved to dispatched; reserved to released; dispatched to settled; dispatched to unknown; unknown to settled, when exact usage is found or the full ceiling is charged. released and settled are terminal. A relay crash between the reserve commit and the first byte is not covered yet (open question 1 in the PR).",
+      "type": "object",
+      "required": ["from", "to"],
+      "properties": {"from": {"$ref": "#/$defs/state"}, "to": {"$ref": "#/$defs/state"}},
+      "additionalProperties": false,
+      "allOf": [{"$ref": "#/$defs/allowed_pairs"}]
+    },
+    "transition_record": {
+      "description": "A transition taken, with when it happened.",
+      "type": "object",
+      "required": ["from", "to", "at"],
+      "properties": {
+        "from": {"$ref": "#/$defs/state"},
+        "to": {"$ref": "#/$defs/state"},
+        "at": {"$ref": "urn:purser:contracts:common:0.1.0#/$defs/rfc3339_utc"}
+      },
+      "additionalProperties": false,
+      "allOf": [{"$ref": "#/$defs/allowed_pairs"}]
+    },
+    "allowed_pairs": {
+      "$comment": "The transition table as data (7.5), shared by transition and transition_record. Exactly one pair matches an allowed transition.",
+      "oneOf": [
+        {"properties": {"from": {"const": "reserved"}, "to": {"const": "dispatched"}}},
+        {"properties": {"from": {"const": "reserved"}, "to": {"const": "released"}}},
+        {"properties": {"from": {"const": "dispatched"}, "to": {"const": "settled"}}},
+        {"properties": {"from": {"const": "dispatched"}, "to": {"const": "unknown"}}},
+        {"properties": {"from": {"const": "unknown"}, "to": {"const": "settled"}}}
+      ],
+      "required": ["from", "to"]
+    },
+    "settlement": {
+      "description": "How a settled attempt's cost was established (7.5, 7.6). response_usage: usage in the response the relay handled, on the direct path. upstream_error: the provider answered with an error before any output began, also on the direct path; it is charged 0 (whether every provider bills nothing for such errors is an open question in the PR). An error after output began is unknown first, then settles from partial stream usage or by ceiling charge. On the path through unknown: partial_stream_usage (exact usage found in partial stream events), provider_usage_by_request_id (provider usage data matched by request ID), or ceiling_charge (no exact usage within the reconciliation window, so the full ceiling is charged). cost_nanodollars is null only for an unbounded meter-only attempt whose usage could not be priced or obtained, with cost_unavailable_reason; it is never 0 in place of unpriced (6.3). overrun is true when cost exceeded the ceiling, an invariant breach handled as an incident (7.6).",
+      "type": "object",
+      "required": ["basis", "cost_nanodollars", "overrun"],
+      "properties": {
+        "basis": {
+          "enum": [
+            "response_usage",
+            "upstream_error",
+            "partial_stream_usage",
+            "provider_usage_by_request_id",
+            "ceiling_charge"
+          ]
+        },
+        "cost_nanodollars": {
+          "oneOf": [{"$ref": "urn:purser:contracts:common:0.1.0#/$defs/nanodollars"}, {"type": "null"}]
+        },
+        "cost_unavailable_reason": {"enum": ["unpriced", "usage_unavailable"]},
+        "overrun": {"type": "boolean"}
+      },
+      "additionalProperties": false,
+      "if": {"properties": {"cost_nanodollars": {"type": "null"}}, "required": ["cost_nanodollars"]},
+      "then": {"required": ["cost_unavailable_reason"], "properties": {"overrun": {"const": false}}},
+      "else": {"not": {"required": ["cost_unavailable_reason"]}}
+    },
+    "path_dispatched": {
+      "$comment": "reserved -> dispatched",
+      "prefixItems": [{"properties": {"from": {"const": "reserved"}, "to": {"const": "dispatched"}}}],
+      "minItems": 1,
+      "maxItems": 1
+    },
+    "path_released": {
+      "$comment": "reserved -> released",
+      "prefixItems": [{"properties": {"from": {"const": "reserved"}, "to": {"const": "released"}}}],
+      "minItems": 1,
+      "maxItems": 1
+    },
+    "path_unknown": {
+      "$comment": "reserved -> dispatched -> unknown",
+      "prefixItems": [
+        {"properties": {"from": {"const": "reserved"}, "to": {"const": "dispatched"}}},
+        {"properties": {"from": {"const": "dispatched"}, "to": {"const": "unknown"}}}
+      ],
+      "minItems": 2,
+      "maxItems": 2
+    },
+    "path_settled_from_response": {
+      "$comment": "reserved -> dispatched -> settled",
+      "prefixItems": [
+        {"properties": {"from": {"const": "reserved"}, "to": {"const": "dispatched"}}},
+        {"properties": {"from": {"const": "dispatched"}, "to": {"const": "settled"}}}
+      ],
+      "minItems": 2,
+      "maxItems": 2
+    },
+    "path_settled_from_unknown": {
+      "$comment": "reserved -> dispatched -> unknown -> settled",
+      "prefixItems": [
+        {"properties": {"from": {"const": "reserved"}, "to": {"const": "dispatched"}}},
+        {"properties": {"from": {"const": "dispatched"}, "to": {"const": "unknown"}}},
+        {"properties": {"from": {"const": "unknown"}, "to": {"const": "settled"}}}
+      ],
+      "minItems": 3,
+      "maxItems": 3
+    }
+  }
+}

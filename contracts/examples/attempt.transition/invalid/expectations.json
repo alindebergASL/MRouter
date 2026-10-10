@@ -1,0 +1,32 @@
+{
+  "released-to-settled.json": {
+    "path": "",
+    "keyword": "oneOf",
+    "why": "released is terminal: its ceiling was returned, so it can never also be charged (7.5)."
+  },
+  "settled-to-unknown.json": {
+    "path": "",
+    "keyword": "oneOf",
+    "why": "settled is terminal; settlement happens exactly once and is idempotent on attempt ID (7.6)."
+  },
+  "reserved-to-settled.json": {
+    "path": "",
+    "keyword": "oneOf",
+    "why": "An attempt cannot settle without being dispatched, since nothing was sent upstream to incur usage."
+  },
+  "dispatched-to-released.json": {
+    "path": "",
+    "keyword": "oneOf",
+    "why": "Once a byte is sent upstream the ceiling cannot be released without charge; the attempt must settle or become unknown (7.5)."
+  },
+  "unknown-to-released.json": {
+    "path": "",
+    "keyword": "oneOf",
+    "why": "An unknown attempt resolves only by settling, with exact usage or the full ceiling; releasing it would let charges fall below true cost (7.5)."
+  },
+  "extra-property-note.json": {
+    "path": "",
+    "keyword": "additionalProperties",
+    "why": "A transition is exactly a from and to pair; extra fields could carry free text."
+  }
+}

@@ -1,0 +1,53 @@
+{
+  "schema_version": "0.1.0",
+  "price_book_version": "illustrative-minimal.1",
+  "published_at": "2026-01-01T00:00:00Z",
+  "currency": "USD",
+  "rate_unit": "usd_per_million_tokens",
+  "stacking_order": [
+    "base_rates",
+    "promotion",
+    "long_context",
+    "speed_or_service_tier",
+    "geography",
+    "negotiated",
+    "per_use_fee"
+  ],
+  "entries": [
+    {
+      "entry_id": "openai.example-small-model",
+      "provider": "openai",
+      "model": "example-small-model",
+      "effective_from": "2026-01-01T00:00:00Z",
+      "effective_until": null,
+      "source": {
+        "url": "https://example.com/illustrative/pricing",
+        "as_of": "2025-12-15"
+      },
+      "rules": [
+        {
+          "type": "base_rates",
+          "source": {
+            "url": "https://example.com/illustrative/pricing#base-rates",
+            "as_of": "2025-12-15"
+          },
+          "rates": {
+            "uncached_input": "0.5",
+            "output": "2"
+          }
+        },
+        {
+          "type": "volume_discount",
+          "source": {
+            "url": "https://example.com/illustrative/pricing#volume",
+            "as_of": "2025-12-15"
+          },
+          "multipliers": {
+            "uncached_input": "0.8",
+            "output": "0.8"
+          }
+        }
+      ]
+    }
+  ]
+}
