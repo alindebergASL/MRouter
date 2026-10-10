@@ -1,0 +1,51 @@
+{
+  "realm": "purser-dev-other",
+  "displayName": "Purser second realm (development only; a foreign issuer for tests)",
+  "enabled": true,
+  "sslRequired": "external",
+  "registrationAllowed": false,
+  "users": [
+    {
+      "id": "ca401000-0000-4000-8000-000000000003",
+      "username": "carol@other-dev.example",
+      "email": "carol@other-dev.example",
+      "emailVerified": true,
+      "firstName": "Carol",
+      "lastName": "Dev",
+      "enabled": true,
+      "credentials": [
+        {
+          "type": "password",
+          "value": "carol-dev-only-not-a-secret",
+          "temporary": false
+        }
+      ]
+    }
+  ],
+  "clients": [
+    {
+      "clientId": "purser-dev-test",
+      "name": "Test client in a foreign realm (dev only)",
+      "enabled": true,
+      "publicClient": true,
+      "standardFlowEnabled": false,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": true,
+      "protocol": "openid-connect",
+      "fullScopeAllowed": false,
+      "protocolMappers": [
+        {
+          "name": "purser-admin-api audience",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "config": {
+            "included.custom.audience": "purser-admin-api",
+            "access.token.claim": "true",
+            "id.token.claim": "false",
+            "introspection.token.claim": "true"
+          }
+        }
+      ]
+    }
+  ]
+}
