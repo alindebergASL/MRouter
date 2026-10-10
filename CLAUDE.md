@@ -16,8 +16,8 @@ budgets and metering every request. Spec: docs/architecture.md. Guarantee IDs
   and contain the same binary as the native release.
 - Every install generates its own secrets and keys; no default credentials
   outside dev.
-- Every request-path query on org data filters by org ID, and row-level security
-  backs it up.
+- Every request-path query on org data filters by org ID. Row-level security backs
+  it up on control-plane tables; the ledger takes the org explicitly and fails closed.
 
 ## Workflow
 1. Plan mode first; reference the guarantee IDs the change affects.

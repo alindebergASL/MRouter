@@ -2,7 +2,7 @@
 
 Draft 0.6, 2026-10-09. Owner: Andrew Lindeberg. Product name chosen 2026-10-07; trademark and domain checks are still pending. Repository: https://github.com/alindebergASL/MRouter.
 
-Changes in 0.6: v1 is our hosted multi-tenant service, and the deployment models are named (1.1); people sign in through Keycloak per ADR 0003, the control plane validates tokens against a configured OIDC issuer and audience, and a platform operator role administers the install (4); orgs are isolated by org ID in every query and by Postgres row-level security, with guarantee A5 (4); every install generates its own secrets and keys through one idempotent bootstrap command, with guarantee D4 (9.1); the auth service added to the component table (9); a self-hosted org install sends us nothing by default (3.1); the customer-hosted gateway widened to a self-hosted org install, and a dedicated per-org instance and personal mode deferred, each with an entry criterion (12).
+Changes in 0.6: v1 is our hosted multi-tenant service, and the deployment models are named (1.1); people sign in through Keycloak per ADR 0003, the control plane validates tokens against a configured OIDC issuer and audience, and platform operators (Purser staff) administer the hosted install (4); orgs are isolated by org ID in every query and by Postgres row-level security on control-plane tables, with guarantee A5 (4); every org has an explicit budget policy, and reservation fails closed without one, with B5 extended (7); every install generates its own secrets and keys through one idempotent bootstrap command, with guarantee D4 (9.1); the auth service added to the component table (9); a self-hosted org install sends us nothing by default (3.1); the customer-hosted gateway kept as a customer-hosted relay, and a self-hosted org install, a dedicated per-org instance, and personal mode deferred, each with an entry criterion (12).
 
 Changes in 0.5: containers are the default packaging for every service, with native packaging only where a container costs the user something real (section 9); image guarantees D1 to D3; container footprint added to the bake-off (10.2); hosted orchestration added to open questions.
 
@@ -31,13 +31,14 @@ This document defines what v1 does, what it promises, and how each promise is te
 
 **Deployment.** v1 is our hosted multi-tenant service, and that service is the revenue model. Customer orgs share one install. They are isolated by org ID in every query, backed by Postgres row-level security, and by Keycloak Organizations in one realm (section 4, ADR 0003).
 
-**Not in v1** (entry criteria in section 12): multi-region, budget leases, expected-cost (bounded) budgets, self-hosted org install, dedicated per-org instance, personal mode, protocol translation between formats, adaptive routing in enforce mode, content-based sensitivity enforcement, prompt and response capture, GPU telemetry routing, MCP and A2A governance.
+**Not in v1** (entry criteria in section 12): multi-region, budget leases, expected-cost (bounded) budgets, customer-hosted relay, self-hosted org install, dedicated per-org instance, personal mode, protocol translation between formats, adaptive routing in enforce mode, content-based sensitivity enforcement, prompt and response capture, GPU telemetry routing, MCP and A2A governance.
 
 ### 1.1 Deployment models
 
 | Model | Status | Who runs it | Orgs per install | People sign in through | Provider credentials held by |
 |---|---|---|---|---|---|
 | Hosted multi-tenant | v1 | Us, in AWS us-east-1 | Many, isolated (A5) | Keycloak: one realm, one Keycloak Organization per customer org | Our relay (3.2) |
+| Customer-hosted relay | Deferred (12) | The customer runs the relay in their network; we run the control plane | Many, as hosted (A5) | Keycloak, in our hosted realm | The customer's relay |
 | Dedicated per-org instance | Deferred (12); premium tier | Us | One | Keycloak, in the instance's own realm | The instance's relay |
 | Self-hosted org install | Deferred (12) | The customer | One or more | Keycloak, in the customer's install | The customer's relay |
 | Personal mode | Deferred (12); possibly a free tier | One person, on their own machine | One org, one user | A built-in passkey or TOTP login; no Keycloak | The user. G2 and C1 are restated for this model before it is built (12). |
@@ -79,6 +80,7 @@ These are two separate questions, answered per path.
 | Local model through the sidecar | No | The local model only | On the device only |
 | Managed relay (v1) | Yes, in relay memory for the duration of the request | The chosen provider | Relay: not persisted (C2). Provider: per that provider's policy and the customer's settings with it. For example, OpenAI documents separate abuse-monitoring and application-state retention. |
 | Cursor through the managed relay (v1, experimental) | Yes, as above | Cursor's backend first, then the chosen provider | As above, plus Cursor's own policies. The router cannot change what Cursor's backend receives. |
+| Customer-hosted relay (deferred) | Our service: no. Content stays in the customer's network; our service receives metadata only. | The chosen provider | Customer-controlled |
 | Self-hosted org install (deferred) | Our service: no. It receives nothing by default; any telemetry to us is opt-in and metadata only. The customer's own relay receives content as the managed relay does. | The chosen provider | Customer-controlled |
 
 A dedicated per-org instance (deferred) handles content as the managed relay does, in an install that serves one org. In personal mode (deferred), the relay runs on the user's own machine and content goes only to the chosen provider.
@@ -116,11 +118,13 @@ Acceptance test: configure a policy that denies destination X and send requests 
 - **Devices.** Enrollment uses a device-authorization flow approved by the user. Each sidecar gets a keypair and an mTLS client certificate from the control plane's CA. Relay access uses short-lived tokens (15 minutes) bound to device and user. Revoking a device or user blocks new tokens immediately; outstanding tokens expire within 15 minutes.
 - **Harness to sidecar.** Loopback only. `connect` writes a per-harness local token, so requests are attributed to a harness and other local processes need that token to use the sidecar.
 - **Cloud-originated clients (Cursor).** A per-user virtual key, scoped to that client type and to the public listener, issued from the console. It is not a provider credential, so C1 still holds, and anything it spends passes through the same reservations. It carries no device binding, so it is revocable and rotatable on its own and subject to its own budget.
-- **RBAC.** Scopes are org → workspace → team → user. Roles are owner, admin, billing admin, member, and viewer. Above the orgs, the platform operator role administers the install itself and requires MFA; the first platform operator is the first admin the bootstrap creates (9.1). No org role grants platform-operator access or can assign it. Model catalog states: proposed → approved → assigned (to groups) → deprecated → retired.
+- **RBAC.** Scopes are org → workspace → team → user. Roles are owner, admin, billing admin, member, and viewer. Model catalog states: proposed → approved → assigned (to groups) → deprecated → retired.
+- **Platform operators.** Purser staff who administer the hosted install. The role sits above the orgs; no org role grants it or can assign it. Only operators create orgs and assign an org's first owner; self-service org sign-up is a later task. Every operator call requires an MFA-level token (its `acr` claim) and writes an audit row: who, action, target, and time. There is no default operator: the only one an install starts with is the bootstrap's first admin (9.1).
 - **Org isolation.** The data model is multi-org in every deployment model (1.1). Every request-path query on org data filters by org ID.
   - **The request's org.** A request acts for one org. For a person, it is the org the request names, and our database must record the person as a member of it; the token's organization claim alone never selects or grants an org. For a device, virtual key, SCIM token, or machine-to-machine client, it is the org the credential was issued in.
-  - **Row-level security, as defense in depth.** Every control-plane table that holds org data has a Postgres row-level security policy keyed on the request's org, for reads and writes (`USING` and `WITH CHECK`). The control plane sets the org per transaction with `SET LOCAL purser.org_id`, never per connection, so a pooled connection carries no org into the next transaction. A query that forgets its org filter still returns nothing from another org, a write cannot touch or create another org's row, and a transaction with no org set sees no org rows. "Holds org data" means every table with an org ID column or a foreign key into one; anything else is on a reviewed allowlist. Policies are forced (`FORCE ROW LEVEL SECURITY`), and the request path's database roles neither own the tables nor have `BYPASSRLS`.
-  - **Finding the org before it is set.** Authentication looks up a credential (a device certificate fingerprint, a virtual-key or SCIM-token hash, a user's subject) before any org is set. It does so only through narrow `SECURITY DEFINER` functions that take the credential and return the principal and its org, and nothing else. Cross-org work (platform-operator views, migrations, the reconciler) runs under separate database roles, never the request path's.
+  - **Row-level security, as defense in depth.** Every control-plane table that holds org data has a Postgres row-level security policy keyed on the request's org, for reads and writes (`USING` and `WITH CHECK`). The control plane sets the org per transaction with `SET LOCAL purser.org_id`, never per connection, so a pooled connection carries no org into the next transaction. A query that forgets its org filter still returns nothing from another org, a write cannot touch or create another org's row, and a transaction with no org set sees no org rows. "Holds org data" means every table with an org ID column or a foreign key into one. Every other table, and any org-data table exempted with a stated reason, is on a reviewed allowlist. Policies are forced (`FORCE ROW LEVEL SECURITY`), and the request path's database roles neither own the tables nor have `BYPASSRLS`.
+  - **The ledger.** The reservation ledger's tables (2) have no row-level security in v1; they are the only org-data tables on the allowlist. Instead, the ledger functions take the org as an explicit argument from the authenticated identity, and Reserve fails closed when the org has no budget policy (7.1, 7.6, B5).
+  - **Finding the org before it is set.** Authentication looks up a credential (a device certificate fingerprint, a virtual-key or SCIM-token hash, a user's subject) before any org is set. It does so only through narrow `SECURITY DEFINER` functions that take the credential and return the principal and its org, and nothing else. Each sets a fixed `search_path` and is owned by a role that cannot log in. Cross-org work (platform-operator views, migrations, the reconciler) runs under separate database roles, never the request path's.
   - **One person, several orgs.** In one realm a person is one Keycloak user. Deprovisioning from an org (SCIM `active: false`, delete, or an admin action through our API) removes that org's membership and revokes the devices enrolled under it; the realm user is disabled only when no membership remains.
   - **SSO domains.** An org's single sign-on can claim only email domains verified for that org, and a domain verified by one org cannot be claimed by another.
 
@@ -132,10 +136,11 @@ Acceptance test: revoke a device mid-session and confirm the relay rejects every
 
 **A5. No org can read or change another org's data.**
 Acceptance test, on one install with two orgs, A and B, each with users, devices, virtual keys, SCIM tokens, machine-to-machine clients, budgets, and usage, and one person who is a member of both:
-1. **API and relay.** Call every control-plane API endpoint, every relay endpoint, the SCIM endpoint, and every budget-interface tool (7.8) with each of org A's credentials (user token, device token and mTLS certificate, virtual key, SCIM token, machine-to-machine client) and org B's identifiers (org, workspace, team, user, device, key, budget, attempt, and session IDs). Every call is refused, no response contains org B data, and no org B row changes. The person in both orgs, acting in org A, gets the same result. No org A role reaches a platform-operator endpoint or can grant that role.
-2. **Row-level security.** As each request-path database role, with org A set on the transaction, run an unfiltered `SELECT`, `UPDATE`, and `DELETE` against every table that holds org data, and an `INSERT` of a row tagged with org B: zero org B rows are read or changed, and the insert fails. With no org set, zero org rows are read. A pooled connection reused after an org A transaction carries no org. CI fails if any table that holds org data lacks a forced policy for reads and writes, if a table outside that set is missing from the allowlist, or if a request-path role owns a table or has `BYPASSRLS`.
-3. **Shared realm.** Deprovisioning the shared person from org A, by SCIM and through the API, leaves their org B membership, sign-in, and devices working. Org A's single sign-on setup cannot claim a domain verified by org B, nor link an identity provider that signs in org B's users.
-4. **Issuer and audience.** Present to every endpoint that accepts it a well-formed user token from another issuer (including another install's realm), a token from the configured issuer for another audience, a relay token signed by another install's keys, and a device certificate from another install's CA. Every one is rejected.
+1. **API and relay.** Call every control-plane API endpoint, every relay endpoint, the SCIM endpoint, and every budget-interface tool (7.8) with each of org A's credentials (user token, device token and mTLS certificate, virtual key, SCIM token, machine-to-machine client) and org B's identifiers (org, workspace, team, user, device, key, budget, attempt, and session IDs). Every call is refused, no response contains org B data, and no org B row changes. The person in both orgs, acting in org A, gets the same result.
+2. **Platform operators.** No org role reaches a platform-operator endpoint, creates an org, assigns an org's first owner, or grants the operator role. An operator token without an MFA-level `acr` is refused on every operator endpoint, and every operator call that succeeds writes one audit row with who, action, target, and time.
+3. **Row-level security.** As each request-path database role, with org A set on the transaction, run an unfiltered `SELECT`, `UPDATE`, and `DELETE` against every table that holds org data and is not on the allowlist, and an `INSERT` of a row tagged with org B: zero org B rows are read or changed, and the insert fails. With no org set, zero org rows are read. A pooled connection reused after an org A transaction carries no org. CI fails if any table that is not on the allowlist lacks a forced policy for reads and writes, if an org-data table other than the ledger's is on the allowlist, if a request-path role owns a table or has `BYPASSRLS`, or if a `SECURITY DEFINER` function lacks a fixed `search_path` or is owned by a role that can log in.
+4. **Shared realm.** Deprovisioning the shared person from org A, by SCIM and through the API, leaves their org B membership, sign-in, and devices working. Org A's single sign-on setup cannot claim a domain verified by org B, nor link an identity provider that signs in org B's users.
+5. **Issuer and audience.** Present to every endpoint that accepts it a well-formed user token from another issuer (including another install's realm), a token from the configured issuer for another audience, a relay token signed by another install's keys, and a device certificate from another install's CA. Every one is rejected.
 
 ## 5. Harness and protocol compatibility
 
@@ -317,6 +322,7 @@ Acceptance test: plant canary strings in local transcripts for every supported h
 - **Windows:** calendar day or month in UTC for v1.
 - **Limit:** in nano-dollars.
 - **Modes:** `strict` (the default) or `meter-only` (alerts, no blocking).
+- **Org policy:** every org gets an explicit org-level budget policy row when it is created, meter-only included. An org with no policy row is never admitted (7.6, B5).
 
 A request is admitted only after reservations commit against every applicable budget.
 
@@ -384,11 +390,12 @@ Worked example at $5/M input and $25/M output, with O_max = 32,000:
 
 ### 7.6 Transactions
 
-**Reserve** (one transaction):
-1. Lock all applicable budget-window rows in ascending ID order (avoids deadlocks).
-2. Check `limit − spent − reserved ≥ ceiling` on each row.
-3. Increment `reserved` on each row.
-4. Insert the attempt row with its ceiling, window IDs, and price-book version.
+**Reserve** (one transaction). The org is an explicit argument, taken from the authenticated identity (4), never inferred from the rows found.
+1. Read the org's budget policy row. If there is none, deny the request with its own error code and commit nothing; a request is never admitted because zero budget rows applied.
+2. Lock all applicable budget-window rows in ascending ID order (avoids deadlocks).
+3. Check `limit − spent − reserved ≥ ceiling` on each row.
+4. Increment `reserved` on each row.
+5. Insert the attempt row with its ceiling, window IDs, and price-book version.
 
 **Settle** (idempotent on attempt ID): transition the state exactly once, release the ceiling, add the cost to the windows recorded on the attempt. A reservation belongs to the window in which it was made, even if settlement happens after rollover.
 
@@ -411,8 +418,8 @@ Acceptance test: requests with no output cap, an unpriced model or tier, an unca
 
 Acceptance test: real Claude Code and Codex clients against an exhausted budget, with the watchdog both on and off. Record the observed client behavior.
 
-**B5. If Postgres is unavailable, strict budgets fail closed.**
-Acceptance test: block Postgres and confirm every strict-budget request is denied, with no upstream attempt made.
+**B5. If Postgres is unavailable or the org has no budget policy, requests fail closed.**
+Acceptance test: block Postgres and confirm every strict-budget request is denied, with no upstream attempt made. Then remove an org's budget policy row, and separately create an org whose policy row is missing, and confirm every request for that org, in strict and meter-only mode, is denied with the missing-policy error code, with no upstream attempt made.
 
 **P1. Every attempt is priced with the price-book version effective when its reservation committed.** A missing entry makes the request unbounded.
 Acceptance test: change a price mid-run and confirm in-flight attempts keep their original version while new reservations use the new one.
@@ -530,7 +537,7 @@ Acceptance test: run the certification sessions (H1) with shadow routing on and 
 
 | Component | Where it runs | Packaging | Why |
 |---|---|---|---|
-| Relay | Our cloud (AWS us-east-1) | Container image, two listeners: mTLS for sidecars, public HTTPS with virtual-key authentication for cloud-originated clients (Cursor) | Long-running service; the same image later serves the dedicated per-org instance and the self-hosted org install (12) |
+| Relay | Our cloud (AWS us-east-1) | Container image, two listeners: mTLS for sidecars, public HTTPS with virtual-key authentication for cloud-originated clients (Cursor) | Long-running service; the same image later serves the customer-hosted relay, the dedicated per-org instance, and the self-hosted org install (12) |
 | Control plane API and console | Our cloud | Two container images | Same reason; they move on-premises unchanged, with no dependence on a cloud's static-hosting services |
 | Auth service (Keycloak) | Our cloud | Third-party container image (`quay.io/keycloak/keycloak`), pinned by digest, run as non-root with a read-only root filesystem where its documentation allows, on its own hostname and load balancer, against its own Amazon RDS for PostgreSQL instance separate from the ledger (ADR 0003) | Sign-in and enrollment only. It is off the traffic path, so an outage blocks new sign-ins and enrollments, not metered traffic or token renewal. |
 | Sidecar in Kubernetes pods | Customer clusters | Container image as a native sidecar: an `initContainers` entry with `restartPolicy: Always`, stable since Kubernetes v1.33. It starts before the agent container and stops after it. | Pods are containers already |
@@ -556,7 +563,7 @@ Acceptance test: run the certification sessions (H1) with shadow routing on and 
 - **Registry:** CI pushes to Amazon ECR in us-east-1 through GitHub's OIDC federation to AWS, so no AWS key is stored in GitHub; our services pull with their IAM role. A public registry for customers' pods is chosen before the first pilot (G3 in the build plan).
 - **Releases:** images and installers are signed, and the control plane publishes the minimum supported sidecar version.
 
-**Hosted orchestration (proposed, open question 9).** Amazon ECS on Fargate for v1: there is no cluster to operate and no control-plane fee. EKS charges $0.10 per cluster-hour on standard Kubernetes version support ($73.00 for a 730-hour month) and $0.60 per cluster-hour on extended support ($438.00) when version upgrades lag. The Helm chart exists either way for customers' pods, and CI tests it on kind (Kubernetes in Docker). Revisit when the self-hosted org install starts.
+**Hosted orchestration (proposed, open question 9).** Amazon ECS on Fargate for v1: there is no cluster to operate and no control-plane fee. EKS charges $0.10 per cluster-hour on standard Kubernetes version support ($73.00 for a 730-hour month) and $0.60 per cluster-hour on extended support ($438.00) when version upgrades lag. The Helm chart exists either way for customers' pods, and CI tests it on kind (Kubernetes in Docker). Revisit when the customer-hosted relay or the self-hosted org install starts.
 
 **Guarantees**
 
@@ -594,7 +601,7 @@ Rules:
 Acceptance test: in CI, bootstrap two fresh installs from the same images and configuration on the Compose stack in a non-development profile, each with its own secret store, and create one org in each. Before gate G2 in the build plan, run it once more against AWS Secrets Manager.
 1. **Unique.** Inventory every secret and key from the secret stores, the services' running configuration, Keycloak's realm, and the databases, not from the bootstrap's own output. No secret, private key, or HMAC key is byte-equal between the two installs, and no public-key or certificate fingerprint matches.
 2. **No default.** Against each install, try every credential found in the repository, the images, the Compose files, and the Helm chart, plus each component's upstream defaults (for example Keycloak's `admin`/`admin` and Postgres's `postgres` user), on every endpoint that authenticates: the console and admin API, Keycloak's admin console and admin API, Postgres, both relay listeners, and device enrollment. Every attempt is rejected. Keycloak's temporary bootstrap admin no longer exists.
-3. **First admin.** The first admin cannot finish signing in without enrolling MFA, and the one-time credential is rejected after first use. A platform operator without MFA is refused.
+3. **First admin.** The install has exactly one platform operator, the first admin. The first admin cannot finish signing in without enrolling MFA, and the one-time credential is rejected after first use.
 4. **Not leaked.** No generated secret, private key, or the one-time credential appears in any log or image layer.
 5. **Idempotent.** A second bootstrap run changes no stored secret or key and creates no second admin. A run killed at each step in turn, then re-run, ends with a working install and replaces nothing already stored.
 6. **Profiles.** Starting any service with the profile unset, or outside development with a credential from the known-default list, fails.
@@ -645,6 +652,7 @@ Acceptance test: replay the same synthetic turns directly and through the router
 |---|---|---|
 | Budget leases and multi-region | The reservation performance target (7.7) is missed in measurement | Fencing tokens. A lease is never reallocated until its holder's attempts are reconciled or the maximum billable duration (provider timeout plus maximum stream length) has passed. |
 | Expected-cost (bounded) budgets | Strict-mode held headroom is a measured top complaint | The overrun bound is defined over globally outstanding billable attempts, including retries and unknown outcomes. Unknown attempts retain their reservation and their unreserved risk allowance. |
+| Customer-hosted relay | The first customer who requires content to stay in their network | The same image in the relay role, in the customer's network, deployed by Helm chart or Compose, with our hosted control plane. Content stays in the customer's network; our service receives metadata only. The relay's own keys come from the same bootstrap rules (D4), and reservations reach our ledger without breaking B2 or B5. |
 | Self-hosted org install | The first design partner or paying customer who requires it | The full stack (Keycloak, Postgres, control plane, relay) as a Compose file and a Helm chart, from the same images we run. The same bootstrap (9.1), so D4 holds for each install. Postgres is the customer's managed instance or a container they operate. Our service receives nothing by default; any telemetry to us is opt-in and metadata only (3.1). |
 | Dedicated per-org instance (premium tier) | The first customer who will pay for it | The hosted images and bootstrap, one org per install, with its own realm, databases, and keys (D4). The data model stays multi-org (1.1). |
 | Personal mode (possibly a free tier) | After the release candidate (gate G4 in the build plan) | One person, shipped as a container, with no Keycloak. On a laptop that is an exception to section 9's rule that Purser never requires a container there; the design either justifies it or adds native packaging. A built-in passkey or TOTP login serves as the configured OIDC issuer (4). The user holds their own provider keys, so G2 and C1 are restated per deployment model, each with its acceptance test, before work starts. The data model stays multi-org (1.1). |

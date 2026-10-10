@@ -2,7 +2,7 @@
 
 Draft 0.3, 2026-10-09. Owner: Andrew Lindeberg. Spec: `docs/architecture.md` in the repository (draft 0.6). Guarantee IDs (C1, B1, H1, D1, …) refer to that document.
 
-Changes in 0.3: the deployment decision recorded (10): v1 is our hosted multi-tenant service, and the other models are deferred with entry criteria in spec section 12. The install bootstrap command (spec 9.1, D4) and Postgres row-level security for org isolation (spec 4, A5) are added to Lane D (5, 7) and to gate G2 (6). The v1 schedule doesn't change. The auth service decision is recorded as made (ADR 0003), and Appendix A matches the root `CLAUDE.md` invariants.
+Changes in 0.3: the deployment decision recorded (10): v1 is our hosted multi-tenant service, and the other models are deferred with entry criteria in spec section 12. The install bootstrap command (spec 9.1, D4) and Postgres row-level security for org isolation (spec 4, A5) are added to Lane D (5, 7) and to gate G2 (6). Lane B's ledger functions take the org as an explicit argument and fail closed when the org has no budget policy (spec 7.6, B5). The v1 schedule doesn't change. The auth service decision is recorded as made (ADR 0003), and Appendix A matches the root `CLAUDE.md` invariants.
 
 Changes in 0.2: containers in the build (2.8), the `deploy/` layout (3), container work assigned to lanes and gates (5 to 7), and two new open decisions (10).
 
@@ -148,8 +148,8 @@ Sum of targets through G4: 12 weeks. The v1 schedule doesn't change with spec dr
 4. Replayer and mock providers, each as a container in the stack. The mock logs every attempt it receives (needed by M1 and B2) and can bill random usage within a request's bounds (needed by B1).
 
 **Lane B**
-1. Ledger schema and SQL functions: reserve (lock windows in ascending ID order; check; increment; insert attempt), settle (idempotent on attempt ID), release, mark-unknown.
-2. B1, B2, B5 property tests in Python against the stack's Postgres container and the mock provider, with concurrency, crashes (container kills), and failover (Toxiproxy) injected.
+1. Ledger schema and SQL functions: reserve (read the org's budget policy and deny with its own error code if there is none; lock windows in ascending ID order; check; increment; insert attempt), settle (idempotent on attempt ID), release, mark-unknown. Every function takes the org as an explicit argument from the authenticated identity; the ledger tables have no row-level security in v1 (spec 4, 7.6).
+2. B1, B2, B5 (including an org with no budget policy) property tests in Python against the stack's Postgres container and the mock provider, with concurrency, crashes (container kills), and failover (Toxiproxy) injected.
 3. Price-book schema covering every rule type in spec 6.3; Python reference implementation; golden fixtures, including the Opus 5.5 fast plus US-only example that must equal $0.209.
 4. Anthropic and OpenAI adapter fixtures from Lane A's recordings.
 
@@ -160,7 +160,7 @@ Sum of targets through G4: 12 weeks. The v1 schedule doesn't change with spec dr
 
 **Lane D**
 1. Auth-service evaluation against requirements: TOTP and passkey MFA, OIDC and SAML SSO, SCIM. ADR.
-2. FastAPI skeleton: orgs, workspaces, users, roles; OpenAPI export; generated TypeScript client; drift check (A1); its Dockerfile, added to the Compose stack. Tokens are validated against the configured OIDC issuer, and every org-scoped table has a forced row-level security policy from the first migration (spec 4, A5).
+2. FastAPI skeleton: orgs, workspaces, users, roles; OpenAPI export; generated TypeScript client; drift check (A1); its Dockerfile, added to the Compose stack. Tokens are validated against the configured OIDC issuer and audience, and every org-scoped table outside the ledger has a forced row-level security policy from the first migration (spec 4, A5). Only platform operators create orgs and assign an org's first owner; each operator call requires an MFA-level `acr` and writes an audit row; creating an org writes its budget policy row (spec 7.1).
 3. Install bootstrap command (spec 9.1, D4): one idempotent control-plane task that generates the realm, admin-client secrets, signing keys, the device CA, HMAC keys, and the first admin, who is also the first platform operator, with MFA required. No default credentials outside the dev profile.
 4. Device enrollment through an OAuth device-authorization flow; control-plane CA issuing mTLS client certificates.
 5. Console shell on the generated client.
@@ -207,7 +207,7 @@ Sum of targets through G4: 12 weeks. The v1 schedule doesn't change with spec dr
 | Decision | Outcome |
 |---|---|
 | Auth service | Keycloak, self-hosted on ECS Fargate against its own RDS instance; one realm per install with Keycloak Organizations as customer orgs ([ADR 0003](adr/0003-auth-service.md)) |
-| Deployment model | v1 is our hosted multi-tenant service, and that is the revenue model. Orgs are isolated by org ID in every query, by row-level security, and by Keycloak Organizations in one realm (A5). Deferred, each with an entry criterion in spec section 12: the self-hosted org install (the first design partner or paying customer who requires it), a dedicated per-org instance as a premium tier (the first customer who will pay for it), and personal mode (after the release candidate, possibly as a free tier). Applying now: every install generates its own secrets through one bootstrap command, with no default credentials outside dev (D4); the data model stays multi-org; the control plane validates tokens against a configured OIDC issuer. The v1 schedule doesn't change (6). |
+| Deployment model | v1 is our hosted multi-tenant service, and that is the revenue model. Orgs are isolated by org ID in every query, by row-level security, and by Keycloak Organizations in one realm (A5). Deferred, each with an entry criterion in spec section 12: a customer-hosted relay with our hosted control plane (the first customer who requires content to stay in their network), the self-hosted org install (the first design partner or paying customer who requires it), a dedicated per-org instance as a premium tier (the first customer who will pay for it), and personal mode (after the release candidate, possibly as a free tier). Applying now: every install generates its own secrets through one bootstrap command, with no default credentials outside dev (D4); the data model stays multi-org; the control plane validates tokens against a configured OIDC issuer. The v1 schedule doesn't change (6). |
 
 **Still open:**
 
@@ -270,8 +270,8 @@ budgets and metering every request. Spec: docs/architecture.md. Guarantee IDs
   and contain the same binary as the native release.
 - Every install generates its own secrets and keys; no default credentials
   outside dev.
-- Every request-path query on org data filters by org ID, and row-level security
-  backs it up.
+- Every request-path query on org data filters by org ID. Row-level security backs
+  it up on control-plane tables; the ledger takes the org explicitly and fails closed.
 
 ## Workflow
 1. Plan mode first; reference the guarantee IDs the change affects.
