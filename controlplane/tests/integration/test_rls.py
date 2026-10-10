@@ -102,7 +102,8 @@ def _orgs_touched(conn: Connection, sql: str) -> set[uuid.UUID] | None:
 
 def test_the_table_list_matches_the_catalog(test_db: TestDatabase) -> None:
     for conn in _connect(test_db.admin_url):
-        assert set(ORG_TABLES) == org_data_tables(conn) - set(RLS_ALLOWLIST)
+        tables = {f"controlplane.{t}" for t in ORG_TABLES}
+        assert tables == set(org_data_tables(conn)) - set(RLS_ALLOWLIST)
 
 
 # -- A5 part 3, as the request path's role --------------------------------------
@@ -128,6 +129,48 @@ def test_with_org_a_set_unfiltered_statements_reach_no_org_b_row(
     if table != "audit_events":  # the API only ever inserts audit rows
         # The policy filters to org A; it doesn't just deny.
         assert _orgs_touched(app_conn, statements["SELECT"]) == {a.id}
+
+
+@pytest.mark.parametrize("table", ORG_TABLES)
+def test_the_org_key_alone_confines_every_command(
+    test_db: TestDatabase, two_orgs: TwoOrgs, table: str
+) -> None:
+    """The policy, not a missing grant: with every privilege granted, org A still reaches only A.
+
+    The app role lacks most UPDATE and every DELETE grant, so the test above
+    passes on "permission denied" for those. Here the grants are added inside a
+    transaction that is rolled back, and the same statements run as the role.
+    """
+    a = two_orgs.a
+    column = ORG_COLUMN[table]
+    for conn in _connect(test_db.admin_url):
+        conn.execute(text(f"GRANT ALL ON controlplane.{table} TO purser_cp_app"))
+        conn.execute(text("SET LOCAL ROLE purser_cp_app"))
+        _set(conn, "purser.org_id", a.id)
+        t = f"controlplane.{table}"
+        for sql in (
+            f"SELECT {column} FROM {t}",
+            f"UPDATE {t} SET {column} = {column} RETURNING {column}",
+        ):
+            assert _orgs_touched(conn, sql) == {a.id}, sql
+
+
+def test_the_org_key_alone_confines_deletes(test_db: TestDatabase, two_orgs: TwoOrgs) -> None:
+    """As above, for DELETE: leaf tables first, so org A's own foreign keys don't object."""
+    a = two_orgs.a
+    leaf_first = ("audit_events", "memberships", "teams", "users", "workspaces", "orgs")
+    assert set(leaf_first) == set(ORG_TABLES)
+    for conn in _connect(test_db.admin_url):
+        for table in leaf_first:
+            conn.execute(text(f"GRANT ALL ON controlplane.{table} TO purser_cp_app"))
+        conn.execute(text("SET LOCAL ROLE purser_cp_app"))
+        _set(conn, "purser.org_id", a.id)
+        for table in leaf_first:
+            column = ORG_COLUMN[table]
+            deleted = set(
+                conn.execute(text(f"DELETE FROM controlplane.{table} RETURNING {column}")).scalars()
+            )
+            assert deleted == {a.id}, table
 
 
 def _insert_tagged_with(org: OrgFixture, member: Member) -> dict[str, tuple[str, dict[str, Any]]]:
@@ -171,7 +214,8 @@ def test_with_org_a_set_an_insert_tagged_with_org_b_fails(
 ) -> None:
     _set(app_conn, "purser.org_id", two_orgs.a.id)
     sql, params = _insert_tagged_with(two_orgs.b, two_orgs.b_member)[table]
-    with pytest.raises(DBAPIError, match="row-level security"):
+    # orgs: refused before the policy, since the request path may not create orgs at all.
+    with pytest.raises(DBAPIError, match=r"row-level security|permission denied for table orgs"):
         app_conn.execute(text(sql), params)
 
 
@@ -185,6 +229,23 @@ def test_org_a_cannot_move_a_row_to_org_b(app_conn: Connection, two_orgs: TwoOrg
     _set(app_conn, "purser.org_id", two_orgs.a.id)
     with pytest.raises(DBAPIError, match="row-level security"):
         app_conn.execute(text("UPDATE controlplane.users SET org_id = :b"), {"b": two_orgs.b.id})
+
+
+def test_the_request_path_cannot_create_or_change_orgs(
+    app_conn: Connection, two_orgs: TwoOrgs
+) -> None:
+    """Only operators create orgs (spec 4): the app role can't, even for an org it sets itself."""
+    forged = uuid.uuid4()
+    _set(app_conn, "purser.org_id", forged)
+    with pytest.raises(DBAPIError, match="permission denied"):
+        app_conn.execute(
+            text("INSERT INTO controlplane.orgs (id, name, status) VALUES (:o, 'x', 'pending')"),
+            {"o": forged},
+        )
+    app_conn.rollback()
+    _set(app_conn, "purser.org_id", two_orgs.a.id)
+    with pytest.raises(DBAPIError, match="permission denied"):
+        app_conn.execute(text("UPDATE controlplane.orgs SET name = 'renamed'"))
 
 
 def test_the_request_path_has_no_operator_reach(app_conn: Connection, two_orgs: TwoOrgs) -> None:
@@ -203,6 +264,7 @@ def _pooled_context_does_not_leak(url: str, **context: uuid.UUID) -> None:
     from purser_controlplane.db import Database, set_context
     from purser_controlplane.models import Org
 
+    backend = text("SELECT pg_backend_pid()")
     database = Database(url, pool_size=1)
     try:
         with database.session() as session:
@@ -211,7 +273,9 @@ def _pooled_context_does_not_leak(url: str, **context: uuid.UUID) -> None:
             session.commit()
             # Re-applied after a commit, in the same session.
             assert session.query(Org).count() >= 1
+            first = session.execute(backend).scalar()
         with database.session() as session:  # same pooled connection, no context
+            assert session.execute(backend).scalar() == first
             assert session.query(Org).count() == 0
             for key in ("purser.org_id", "purser.operator_sub"):
                 setting = text("SELECT current_setting(:k, true)")
@@ -284,6 +348,52 @@ def test_the_operator_role_reaches_only_what_operator_routes_need(
     for table in ORG_TABLES:
         sql = f"DELETE FROM controlplane.{table} RETURNING {ORG_COLUMN[table]}"
         assert _orgs_touched(operator_conn, sql) is None, table
+
+
+def test_the_operator_role_writes_only_what_org_creation_needs(
+    operator_conn: Connection, two_orgs: TwoOrgs
+) -> None:
+    from purser_controlplane.seed import ALICE_SUB
+
+    _set(operator_conn, "purser.operator_sub", ALICE_SUB)
+    refused = {
+        # An audit row naming someone else, or the system.
+        "forged audit actor": (
+            "INSERT INTO controlplane.audit_events (id, actor_kind, actor_sub, action, target_type)"
+            " VALUES (gen_random_uuid(), 'user', gen_random_uuid(), 'x', 'org')",
+            "row-level security",
+        ),
+        # An org born active, or with a Keycloak link it didn't provision.
+        "active org": (
+            "INSERT INTO controlplane.orgs (id, name, status) VALUES (gen_random_uuid(), 'x', 'active')",
+            "row-level security",
+        ),
+        # Any grant but an org's first owner.
+        "admin grant": (
+            "INSERT INTO controlplane.memberships (id, org_id, user_id, role, scope_type)"
+            f" VALUES (gen_random_uuid(), '{two_orgs.a.id}', '{two_orgs.a_member.user_id}',"
+            " 'admin', 'org')",
+            "row-level security",
+        ),
+        # Moving a user to another org, or renaming an org.
+        "user org change": (
+            "UPDATE controlplane.users SET org_id = gen_random_uuid()",
+            "permission denied",
+        ),
+        "org rename": ("UPDATE controlplane.orgs SET name = 'renamed'", "permission denied"),
+    }
+    for sql, error in refused.values():
+        savepoint = operator_conn.begin_nested()
+        with pytest.raises(DBAPIError, match=error):
+            operator_conn.execute(text(sql))
+        savepoint.rollback()
+    # Active rows can't be changed at all, even in the columns it may write.
+    savepoint = operator_conn.begin_nested()
+    changed = operator_conn.execute(
+        text("UPDATE controlplane.orgs SET status = 'pending' WHERE id = :a"), {"a": two_orgs.a.id}
+    ).rowcount
+    savepoint.rollback()
+    assert changed == 0
 
 
 def test_the_operator_role_cannot_list_operators(operator_conn: Connection) -> None:

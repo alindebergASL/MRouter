@@ -53,12 +53,16 @@ Scope: Auth service, the install bootstrap command, orgs and RBAC with row-level
     `bootstrap-operator`, `dev-seed`) is an explicit `owner_maintenance` policy, visible in the
     catalog, instead of the implicit owner exemption.
   - The `SECURITY DEFINER` functions (`is_operator`, `current_operator_is_valid`) are owned by
-    `purser_cp_definer`, which cannot log in and reads `platform_operators` only; `search_path`
-    stays fixed.
+    `purser_cp_definer`, which cannot log in and reads `platform_operators` only; their
+    `search_path` is `pg_catalog, pg_temp`.
   - Cross-org work runs on its own roles, never the request path's: operator routes use
-    `purser_cp_operator` through a second engine (`PURSER_DB_OPERATOR_URL`); the sweeper keeps
-    `purser_cp_sweeper`. The request path's `purser_cp_app` has one policy, `org_isolation`, so
-    no setting its transaction makes (a known operator's sub included) reaches another org.
+    `purser_cp_operator` through a second engine (`PURSER_DB_OPERATOR_URL`), with only what
+    creating and listing orgs needs (column-level updates, its own audit rows); the sweeper keeps
+    `purser_cp_sweeper`. The request path's `purser_cp_app` has one policy, `org_isolation`, no
+    operator function, and no write on `orgs`, so a known operator's sub grants it nothing.
+  - Every member-route query names the path's org (spec 4), tested with the API on a role that
+    sees every org (`test_org_filters.py`). Row-level security catches a forgotten filter; it is
+    not an injection defense, since injected SQL can set `purser.org_id` itself.
   - The reviewed allowlist (`platform_operators`, `alembic_version`; the ledger's tables when Lane
     B adds them) and the A5 part 3 catalog checks in `controlplane/tests/integration/
     rls_catalog.py`, with negative tests for each kind of violation and a check that revision
@@ -107,6 +111,11 @@ Scope: Auth service, the install bootstrap command, orgs and RBAC with row-level
   tier-0, because `manage-users` can reset credentials.
 - **D2 remainder** (Lane A): SBOM, cosign signing, and the vulnerability-scan gate for the
   control-plane image.
+- **Production database roles** (Lane A infrastructure, before migration 0002 runs there):
+  `purser_cp_owner`, `purser_cp_app`, `purser_cp_operator`, `purser_cp_sweeper` (login,
+  NOBYPASSRLS), `purser_cp_definer` (NOLOGIN), and `GRANT purser_cp_definer TO purser_cp_owner
+  WITH INHERIT TRUE, SET TRUE`, as `deploy/compose/controlplane/controlplane-db.sql` does in dev.
+  Without them 0002 fails as a whole, never half-applied.
 
 ## Blocked
 - Nothing. The A5 and D4 test modules come from a later spec-change PR (spec draft 0.6 defines them).

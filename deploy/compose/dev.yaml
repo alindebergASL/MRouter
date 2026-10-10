@@ -187,8 +187,9 @@ services:
         condition: service_completed_successfully
 
   cp-tools-solo:
-    # The same toolchain on its own network, for work that needs no stack
-    # (locking, lint, unit tests, the Stop hook).
+    # The same toolchain without Keycloak's network namespace, for work that
+    # needs no stack running (locking, lint, unit tests, the Stop hook). It is
+    # still on the Compose network and inherits the dev database URLs above.
     <<: *cp-tools
     profiles: ["tools"]
 

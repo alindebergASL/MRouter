@@ -97,8 +97,8 @@ def get_session(request: Request) -> Iterator[Session]:
 def get_operator_session(request: Request) -> Iterator[Session]:
     """A session on the operator role, the only cross-org role the API holds.
 
-    Only require_operator() uses it. The request path's role has no policy
-    that reaches another org, whatever its transaction sets (spec 4).
+    Only require_operator() uses it. The request path's role has no operator
+    policy, no operator function, and no write on orgs (spec 4).
     """
     database: Database = request.app.state.operator_db
     with database.session() as session:
@@ -158,7 +158,7 @@ def get_org_context(org_id: uuid.UUID, principal: PrincipalDep, session: Session
         for r, s, w, t in session.execute(
             select(
                 Membership.role, Membership.scope_type, Membership.workspace_id, Membership.team_id
-            ).where(Membership.user_id == user_id)
+            ).where(Membership.org_id == org_id, Membership.user_id == user_id)
         )
     )
     if not grants:
