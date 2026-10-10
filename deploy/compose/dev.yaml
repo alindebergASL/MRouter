@@ -34,5 +34,61 @@ services:
       start_period: 30s
       start_interval: 1s
 
+  keycloak-db-init:
+    # One-shot: creates Keycloak's role and database in the dev Postgres. Runs on
+    # every `up` (idempotent), so it also works on a pgdata volume that predates
+    # Keycloak; /docker-entrypoint-initdb.d would run only on a fresh volume.
+    image: public.ecr.aws/docker/library/postgres:18.6-trixie@sha256:74935e72241653ca55e0414067e6d8763aceb8a810eb51b452253ec3dcfc4336
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      PGPASSWORD: purser-dev-only-not-a-secret
+    entrypoint: ["psql", "-h", "postgres", "-U", "purser_dev", "-d", "purser_dev",
+                 "-v", "ON_ERROR_STOP=1", "-q", "-f", "/init/keycloak-db.sql"]
+    volumes:
+      - ./keycloak/keycloak-db.sql:/init/keycloak-db.sql:ro
+    restart: "no"
+
+  keycloak:
+    # Auth service (ADR 0003). start-dev is for development only: never use it
+    # outside this stack. Production runs `start` with TLS, its own RDS instance,
+    # and secrets from AWS Secrets Manager.
+    image: quay.io/keycloak/keycloak:26.8.0@sha256:b0f60d489d51c5d113390bdf5461d4c06e6051be026c05549f2e1e10ec352bcc
+    command: ["start-dev", "--import-realm"]
+    depends_on:
+      keycloak-db-init:
+        condition: service_completed_successfully
+    environment:
+      KC_DB: postgres
+      KC_DB_URL: jdbc:postgresql://postgres:5432/keycloak
+      # Development-only credentials. Not secrets; never reuse them anywhere else.
+      KC_DB_USERNAME: keycloak_dev
+      KC_DB_PASSWORD: keycloak-db-dev-only-not-a-secret
+      KC_BOOTSTRAP_ADMIN_USERNAME: admin
+      KC_BOOTSTRAP_ADMIN_PASSWORD: keycloak-admin-dev-only-not-a-secret
+      # One issuer everywhere: http://localhost:58080/realms/<realm>. Keycloak
+      # listens on 58080 inside the container too, so a container sharing its
+      # network namespace reaches the same URL as the host. Backchannel requests
+      # from other containers (http://keycloak:58080) resolve dynamically.
+      KC_HTTP_PORT: "58080"
+      KC_HOSTNAME: http://localhost:58080
+      KC_HOSTNAME_BACKCHANNEL_DYNAMIC: "true"
+      KC_HEALTH_ENABLED: "true"
+    ports:
+      - "127.0.0.1:58080:58080"
+    volumes:
+      # Imported at start when the realm doesn't exist yet. After editing a realm
+      # file, `make dev-reset` (or delete the realm) to import it again.
+      - ./keycloak/realms:/opt/keycloak/data/import:ro
+    healthcheck:
+      # The image has no curl; bash's /dev/tcp reaches the management port.
+      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/9000 && printf 'GET /health/ready HTTP/1.0\\r\\nHost: localhost\\r\\n\\r\\n' >&3 && grep -q '\"status\": *\"UP\"' <&3"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 120s
+      start_interval: 2s
+
 volumes:
   pgdata:

@@ -1,0 +1,599 @@
+{
+  "realm": "purser-dev",
+  "displayName": "Purser (development only)",
+  "enabled": true,
+  "sslRequired": "external",
+  "organizationsEnabled": true,
+  "registrationAllowed": false,
+  "loginWithEmailAllowed": true,
+  "duplicateEmailsAllowed": false,
+  "accessTokenLifespan": 300,
+  "adminEventsEnabled": true,
+  "adminEventsDetailsEnabled": false,
+  "eventsEnabled": false,
+  "browserFlow": "browser-step-up",
+  "otpPolicyType": "totp",
+  "otpPolicyAlgorithm": "HmacSHA1",
+  "otpPolicyDigits": 6,
+  "otpPolicyPeriod": 30,
+  "attributes": {
+    "adminEventsExpiration": "604800",
+    "acr.loa.map": "{\"pwd\":1,\"mfa\":2}"
+  },
+  "defaultDefaultClientScopes": [
+    "basic",
+    "acr",
+    "web-origins",
+    "profile",
+    "email"
+  ],
+  "defaultOptionalClientScopes": [],
+  "clientScopes": [
+    {
+      "name": "basic",
+      "description": "Subject and auth time",
+      "protocol": "openid-connect",
+      "attributes": {
+        "include.in.token.scope": "false",
+        "display.on.consent.screen": "false"
+      },
+      "protocolMappers": [
+        {
+          "name": "sub",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-sub-mapper",
+          "config": {
+            "access.token.claim": "true",
+            "id.token.claim": "false",
+            "introspection.token.claim": "true"
+          }
+        },
+        {
+          "name": "auth_time",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usersessionmodel-note-mapper",
+          "config": {
+            "access.token.claim": "true",
+            "id.token.claim": "true",
+            "introspection.token.claim": "true",
+            "user.session.note": "AUTH_TIME",
+            "claim.name": "auth_time",
+            "jsonType.label": "long"
+          }
+        }
+      ]
+    },
+    {
+      "name": "acr",
+      "description": "Authentication context class (pwd or mfa)",
+      "protocol": "openid-connect",
+      "attributes": {
+        "include.in.token.scope": "false",
+        "display.on.consent.screen": "false"
+      },
+      "protocolMappers": [
+        {
+          "name": "acr loa level",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-acr-mapper",
+          "config": {
+            "access.token.claim": "true",
+            "id.token.claim": "true",
+            "introspection.token.claim": "true"
+          }
+        }
+      ]
+    },
+    {
+      "name": "web-origins",
+      "description": "Allowed CORS origins",
+      "protocol": "openid-connect",
+      "attributes": {
+        "include.in.token.scope": "false",
+        "display.on.consent.screen": "false"
+      },
+      "protocolMappers": [
+        {
+          "name": "allowed web origins",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-allowed-origins-mapper",
+          "config": {
+            "access.token.claim": "true",
+            "id.token.claim": "false",
+            "introspection.token.claim": "true"
+          }
+        }
+      ]
+    },
+    {
+      "name": "organization",
+      "description": "Keycloak organization memberships, as IDs",
+      "protocol": "openid-connect",
+      "attributes": {
+        "include.in.token.scope": "true",
+        "display.on.consent.screen": "false"
+      },
+      "protocolMappers": [
+        {
+          "name": "organization",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-organization-membership-mapper",
+          "config": {
+            "access.token.claim": "true",
+            "id.token.claim": "true",
+            "introspection.token.claim": "true",
+            "claim.name": "organization",
+            "jsonType.label": "JSON",
+            "multivalued": "true",
+            "addOrganizationId": "true",
+            "addOrganizationAttributes": "false"
+          }
+        }
+      ]
+    },
+    {
+      "name": "purser-admin-api",
+      "description": "Audience: the Purser admin API",
+      "protocol": "openid-connect",
+      "attributes": {
+        "include.in.token.scope": "false",
+        "display.on.consent.screen": "false"
+      },
+      "protocolMappers": [
+        {
+          "name": "purser-admin-api audience",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "config": {
+            "access.token.claim": "true",
+            "id.token.claim": "false",
+            "introspection.token.claim": "true",
+            "included.custom.audience": "purser-admin-api"
+          }
+        }
+      ]
+    },
+    {
+      "name": "profile",
+      "description": "Display name, in the ID token only",
+      "protocol": "openid-connect",
+      "attributes": {
+        "include.in.token.scope": "true",
+        "display.on.consent.screen": "false"
+      },
+      "protocolMappers": [
+        {
+          "name": "full name",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-full-name-mapper",
+          "config": {
+            "access.token.claim": "false",
+            "id.token.claim": "true",
+            "introspection.token.claim": "false",
+            "userinfo.token.claim": "true"
+          }
+        },
+        {
+          "name": "username",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-attribute-mapper",
+          "config": {
+            "access.token.claim": "false",
+            "id.token.claim": "true",
+            "introspection.token.claim": "false",
+            "userinfo.token.claim": "true",
+            "user.attribute": "username",
+            "claim.name": "preferred_username",
+            "jsonType.label": "String"
+          }
+        }
+      ]
+    },
+    {
+      "name": "email",
+      "description": "Email, in the ID token only",
+      "protocol": "openid-connect",
+      "attributes": {
+        "include.in.token.scope": "true",
+        "display.on.consent.screen": "false"
+      },
+      "protocolMappers": [
+        {
+          "name": "email",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-attribute-mapper",
+          "config": {
+            "access.token.claim": "false",
+            "id.token.claim": "true",
+            "introspection.token.claim": "false",
+            "userinfo.token.claim": "true",
+            "user.attribute": "email",
+            "claim.name": "email",
+            "jsonType.label": "String"
+          }
+        },
+        {
+          "name": "email verified",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-property-mapper",
+          "config": {
+            "access.token.claim": "false",
+            "id.token.claim": "true",
+            "introspection.token.claim": "false",
+            "userinfo.token.claim": "true",
+            "user.attribute": "emailVerified",
+            "claim.name": "email_verified",
+            "jsonType.label": "boolean"
+          }
+        }
+      ]
+    }
+  ],
+  "organizations": [
+    {
+      "id": "ac3e0000-0000-4000-8000-000000000001",
+      "name": "Acme Dev",
+      "alias": "acme-dev",
+      "enabled": true,
+      "description": "Development-only test organization",
+      "domains": [
+        {
+          "name": "acme-dev.example",
+          "verified": false
+        }
+      ],
+      "members": [
+        {
+          "username": "alice@acme-dev.example"
+        },
+        {
+          "username": "bob@acme-dev.example"
+        }
+      ]
+    }
+  ],
+  "components": {
+    "org.keycloak.userprofile.UserProfileProvider": [
+      {
+        "providerId": "declarative-user-profile",
+        "subComponents": {},
+        "config": {
+          "kc.user.profile.config": [
+            "{\"attributes\":[{\"name\":\"username\",\"displayName\":\"${username}\",\"validations\":{\"length\":{\"min\":3,\"max\":255},\"username-prohibited-characters\":{},\"up-username-not-idn-homograph\":{}},\"permissions\":{\"view\":[\"admin\",\"user\"],\"edit\":[\"admin\"]},\"multivalued\":false},{\"name\":\"email\",\"displayName\":\"${email}\",\"validations\":{\"email\":{},\"length\":{\"max\":255}},\"required\":{\"roles\":[\"user\"]},\"permissions\":{\"view\":[\"admin\",\"user\"],\"edit\":[\"admin\"]},\"multivalued\":false},{\"name\":\"firstName\",\"displayName\":\"${firstName}\",\"validations\":{\"length\":{\"max\":255},\"person-name-prohibited-characters\":{}},\"required\":{\"roles\":[\"user\"]},\"permissions\":{\"view\":[\"admin\",\"user\"],\"edit\":[\"admin\",\"user\"]},\"multivalued\":false},{\"name\":\"lastName\",\"displayName\":\"${lastName}\",\"validations\":{\"length\":{\"max\":255},\"person-name-prohibited-characters\":{}},\"required\":{\"roles\":[\"user\"]},\"permissions\":{\"view\":[\"admin\",\"user\"],\"edit\":[\"admin\",\"user\"]},\"multivalued\":false},{\"name\":\"purser_id\",\"displayName\":\"Purser ID\",\"permissions\":{\"view\":[\"admin\"],\"edit\":[\"admin\"]},\"multivalued\":false,\"validations\":{\"pattern\":{\"pattern\":\"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$\",\"error-message\":\"purser_id must be a lowercase UUID\"}}}],\"groups\":[{\"name\":\"user-metadata\",\"displayHeader\":\"User metadata\",\"displayDescription\":\"Attributes, which refer to user metadata\"}]}"
+          ]
+        }
+      }
+    ]
+  },
+  "users": [
+    {
+      "id": "a11ce000-0000-4000-8000-000000000001",
+      "username": "alice@acme-dev.example",
+      "email": "alice@acme-dev.example",
+      "emailVerified": true,
+      "firstName": "Alice",
+      "lastName": "Dev",
+      "enabled": true,
+      "credentials": [
+        {
+          "type": "password",
+          "value": "alice-dev-only-not-a-secret",
+          "temporary": false
+        },
+        {
+          "type": "otp",
+          "userLabel": "dev-only",
+          "secretData": "{\"value\":\"alice-totp-dev-only-not-a-secret\"}",
+          "credentialData": "{\"subType\":\"totp\",\"digits\":6,\"counter\":0,\"period\":30,\"algorithm\":\"HmacSHA1\"}"
+        }
+      ]
+    },
+    {
+      "id": "b0b00000-0000-4000-8000-000000000002",
+      "username": "bob@acme-dev.example",
+      "email": "bob@acme-dev.example",
+      "emailVerified": true,
+      "firstName": "Bob",
+      "lastName": "Dev",
+      "enabled": true,
+      "credentials": [
+        {
+          "type": "password",
+          "value": "bob-dev-only-not-a-secret",
+          "temporary": false
+        }
+      ]
+    },
+    {
+      "username": "service-account-purser-controlplane",
+      "enabled": true,
+      "serviceAccountClientId": "purser-controlplane",
+      "clientRoles": {
+        "realm-management": [
+          "view-users",
+          "query-users",
+          "manage-users",
+          "view-events",
+          "manage-organizations",
+          "view-organizations",
+          "query-organizations",
+          "view-realm"
+        ]
+      }
+    }
+  ],
+  "clients": [
+    {
+      "clientId": "purser-controlplane",
+      "name": "Purser control plane (admin API client)",
+      "enabled": true,
+      "publicClient": false,
+      "clientAuthenticatorType": "client-secret",
+      "secret": "controlplane-dev-only-not-a-secret",
+      "serviceAccountsEnabled": true,
+      "standardFlowEnabled": false,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "protocol": "openid-connect",
+      "fullScopeAllowed": false,
+      "defaultClientScopes": [
+        "basic"
+      ],
+      "optionalClientScopes": []
+    },
+    {
+      "clientId": "purser-console",
+      "name": "Purser console",
+      "enabled": true,
+      "publicClient": true,
+      "standardFlowEnabled": true,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "redirectUris": [
+        "http://localhost:3000/*"
+      ],
+      "webOrigins": [
+        "http://localhost:3000"
+      ],
+      "attributes": {
+        "pkce.code.challenge.method": "S256"
+      },
+      "protocol": "openid-connect",
+      "fullScopeAllowed": false,
+      "defaultClientScopes": [
+        "basic",
+        "acr",
+        "web-origins",
+        "profile",
+        "email",
+        "organization",
+        "purser-admin-api"
+      ],
+      "optionalClientScopes": []
+    },
+    {
+      "clientId": "purser-dev-test",
+      "name": "Development and test client (dev realm only)",
+      "enabled": true,
+      "publicClient": true,
+      "standardFlowEnabled": true,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": true,
+      "redirectUris": [
+        "http://localhost/dev-test-callback"
+      ],
+      "attributes": {
+        "pkce.code.challenge.method": "S256"
+      },
+      "protocol": "openid-connect",
+      "fullScopeAllowed": false,
+      "defaultClientScopes": [
+        "basic",
+        "acr",
+        "web-origins",
+        "profile",
+        "email",
+        "organization",
+        "purser-admin-api"
+      ],
+      "optionalClientScopes": []
+    },
+    {
+      "clientId": "purser-dev-noaud",
+      "name": "Test client without the admin-API audience (dev realm only)",
+      "enabled": true,
+      "publicClient": true,
+      "standardFlowEnabled": false,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": true,
+      "protocol": "openid-connect",
+      "fullScopeAllowed": false,
+      "defaultClientScopes": [
+        "basic",
+        "acr",
+        "web-origins",
+        "profile",
+        "email",
+        "organization"
+      ],
+      "optionalClientScopes": []
+    },
+    {
+      "clientId": "purser-dev-shortlived",
+      "name": "Test client with 2-second access tokens (dev realm only)",
+      "enabled": true,
+      "publicClient": true,
+      "standardFlowEnabled": false,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": true,
+      "attributes": {
+        "access.token.lifespan": "2"
+      },
+      "protocol": "openid-connect",
+      "fullScopeAllowed": false,
+      "defaultClientScopes": [
+        "basic",
+        "acr",
+        "web-origins",
+        "profile",
+        "email",
+        "organization",
+        "purser-admin-api"
+      ],
+      "optionalClientScopes": []
+    }
+  ],
+  "clientScopeMappings": {
+    "realm-management": [
+      {
+        "client": "purser-controlplane",
+        "roles": [
+          "view-users",
+          "query-users",
+          "manage-users",
+          "view-events",
+          "manage-organizations",
+          "view-organizations",
+          "query-organizations",
+          "view-realm"
+        ]
+      }
+    ]
+  },
+  "authenticationFlows": [
+    {
+      "alias": "browser-step-up",
+      "description": "Browser login with step-up: level 1 (pwd) is a password, level 2 (mfa) adds TOTP or a passkey",
+      "providerId": "basic-flow",
+      "topLevel": true,
+      "builtIn": false,
+      "authenticationExecutions": [
+        {
+          "authenticator": "auth-cookie",
+          "requirement": "ALTERNATIVE",
+          "priority": 10,
+          "autheticatorFlow": false,
+          "userSetupAllowed": false
+        },
+        {
+          "flowAlias": "browser-step-up-forms",
+          "requirement": "ALTERNATIVE",
+          "priority": 20,
+          "autheticatorFlow": true,
+          "userSetupAllowed": false
+        }
+      ]
+    },
+    {
+      "alias": "browser-step-up-forms",
+      "description": "Levels of authentication",
+      "providerId": "basic-flow",
+      "topLevel": false,
+      "builtIn": false,
+      "authenticationExecutions": [
+        {
+          "flowAlias": "browser-step-up-level-1",
+          "requirement": "CONDITIONAL",
+          "priority": 10,
+          "autheticatorFlow": true,
+          "userSetupAllowed": false
+        },
+        {
+          "flowAlias": "browser-step-up-level-2",
+          "requirement": "CONDITIONAL",
+          "priority": 20,
+          "autheticatorFlow": true,
+          "userSetupAllowed": false
+        }
+      ]
+    },
+    {
+      "alias": "browser-step-up-level-1",
+      "description": "Level 1 (pwd): username and password",
+      "providerId": "basic-flow",
+      "topLevel": false,
+      "builtIn": false,
+      "authenticationExecutions": [
+        {
+          "authenticator": "conditional-level-of-authentication",
+          "authenticatorConfig": "loa-1-pwd",
+          "requirement": "REQUIRED",
+          "priority": 10,
+          "autheticatorFlow": false,
+          "userSetupAllowed": false
+        },
+        {
+          "authenticator": "auth-username-password-form",
+          "requirement": "REQUIRED",
+          "priority": 20,
+          "autheticatorFlow": false,
+          "userSetupAllowed": false
+        }
+      ]
+    },
+    {
+      "alias": "browser-step-up-level-2",
+      "description": "Level 2 (mfa): a second factor",
+      "providerId": "basic-flow",
+      "topLevel": false,
+      "builtIn": false,
+      "authenticationExecutions": [
+        {
+          "authenticator": "conditional-level-of-authentication",
+          "authenticatorConfig": "loa-2-mfa",
+          "requirement": "REQUIRED",
+          "priority": 10,
+          "autheticatorFlow": false,
+          "userSetupAllowed": false
+        },
+        {
+          "flowAlias": "browser-step-up-second-factor",
+          "requirement": "REQUIRED",
+          "priority": 20,
+          "autheticatorFlow": true,
+          "userSetupAllowed": false
+        }
+      ]
+    },
+    {
+      "alias": "browser-step-up-second-factor",
+      "description": "TOTP or a passkey (WebAuthn)",
+      "providerId": "basic-flow",
+      "topLevel": false,
+      "builtIn": false,
+      "authenticationExecutions": [
+        {
+          "authenticator": "auth-otp-form",
+          "requirement": "ALTERNATIVE",
+          "priority": 10,
+          "autheticatorFlow": false,
+          "userSetupAllowed": false
+        },
+        {
+          "authenticator": "webauthn-authenticator",
+          "requirement": "ALTERNATIVE",
+          "priority": 20,
+          "autheticatorFlow": false,
+          "userSetupAllowed": false
+        }
+      ]
+    }
+  ],
+  "authenticatorConfig": [
+    {
+      "alias": "loa-1-pwd",
+      "config": {
+        "loa-condition-level": "1",
+        "loa-max-age": "36000"
+      }
+    },
+    {
+      "alias": "loa-2-mfa",
+      "config": {
+        "loa-condition-level": "2",
+        "loa-max-age": "300"
+      }
+    }
+  ],
+  "editUsernameAllowed": false
+}
