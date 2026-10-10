@@ -120,6 +120,23 @@ jobs:
         if: always()
         run: docker compose -f deploy/compose/dev.yaml --profile app down
 
+  a1-drift:
+    # A1: the committed OpenAPI document is exactly FastAPI's output, and the
+    # committed TypeScript client is exactly a fresh generation from it.
+    name: a1-drift
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: OpenAPI document matches FastAPI's output
+        run: make cp-openapi-check
+
+      - name: TypeScript client matches a fresh generation, and type-checks
+        run: make console-client-check
+
   checks:
     name: checks
     runs-on: ubuntu-24.04
