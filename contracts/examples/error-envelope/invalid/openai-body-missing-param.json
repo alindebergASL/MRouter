@@ -1,0 +1,17 @@
+{
+  "protocol": "openai_chat_completions",
+  "denial": "policy_denied",
+  "code": "purser_policy_denied",
+  "status": 403,
+  "headers": {
+    "content-type": "application/json",
+    "purser-attempt-id": "9b4c7a5e-1f6d-4c2b-9e0a-5d6c7b8a9f0e"
+  },
+  "body": {
+    "error": {
+      "message": "Purser destination policy does not allow this request to reach this provider or model.",
+      "type": "permission_error",
+      "code": "purser_policy_denied"
+    }
+  }
+}

@@ -1,0 +1,30 @@
+{
+  "schema_version": "0.1.0",
+  "attempt_id": "81d4a260-b395-4e46-8287-95a6b42cd2e8",
+  "state": "settled",
+  "reserved_at": "2026-10-09T16:02:17.900Z",
+  "ceiling_nanodollars": null,
+  "ceiling_unavailable_reason": "unbounded_meter_only",
+  "budget_window_ids": [
+    "win-ws_main-month-2026-10"
+  ],
+  "price_book_version": "pb-2026-10-07",
+  "retry_of_attempt_id": null,
+  "transitions": [
+    {
+      "from": "reserved",
+      "to": "dispatched",
+      "at": "2026-10-09T16:02:17.912Z"
+    },
+    {
+      "from": "dispatched",
+      "to": "settled",
+      "at": "2026-10-09T16:03:55.231Z"
+    }
+  ],
+  "settlement": {
+    "basis": "response_usage",
+    "cost_nanodollars": 734125000,
+    "overrun": false
+  }
+}

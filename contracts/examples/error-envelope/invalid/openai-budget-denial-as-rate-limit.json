@@ -1,0 +1,26 @@
+{
+  "protocol": "openai_responses",
+  "denial": "budget_exceeded",
+  "code": "purser_budget_exceeded",
+  "status": 429,
+  "headers": {
+    "content-type": "application/json",
+    "purser-attempt-id": "6e1f4d2b-8c3a-4f9e-8b7d-2a3f4e5d6c7b",
+    "retry-after": "1933200"
+  },
+  "body": {
+    "error": {
+      "message": "Purser budget exceeded for this window. retry-after gives the seconds until the window resets.",
+      "type": "rate_limit_error",
+      "param": null,
+      "code": "purser_budget_exceeded"
+    },
+    "purser": {
+      "scope": "org",
+      "window": "month",
+      "window_resets_at": "2026-11-01T00:00:00Z",
+      "ceiling_nanodollars": 1800000000,
+      "remaining_nanodollars": -37500000
+    }
+  }
+}

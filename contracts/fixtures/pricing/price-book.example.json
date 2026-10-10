@@ -1,0 +1,113 @@
+{
+  "schema_version": "0.1.0",
+  "price_book_version": "2026-10-09.1",
+  "published_at": "2026-10-09T00:00:00Z",
+  "currency": "USD",
+  "rate_unit": "usd_per_million_tokens",
+  "stacking_order": [
+    "base_rates",
+    "promotion",
+    "long_context",
+    "speed_or_service_tier",
+    "geography",
+    "negotiated",
+    "per_use_fee"
+  ],
+  "entries": [
+    {
+      "entry_id": "anthropic.claude-opus-5-5",
+      "provider": "anthropic",
+      "model": "claude-opus-5-5",
+      "effective_from": "2026-10-09T00:00:00Z",
+      "effective_until": null,
+      "source": {
+        "url": "https://platform.claude.com/docs/en/about-claude/pricing",
+        "as_of": "2026-10-09"
+      },
+      "rules": [
+        {
+          "type": "base_rates",
+          "source": {
+            "url": "https://platform.claude.com/docs/en/about-claude/pricing#model-pricing",
+            "as_of": "2026-10-09"
+          },
+          "rates": {
+            "uncached_input": "4",
+            "cache_read": "0.2",
+            "cache_write_5m": "5",
+            "cache_write_1h": "8",
+            "output": "20"
+          }
+        },
+        {
+          "type": "speed_or_service_tier",
+          "source": {
+            "url": "https://platform.claude.com/docs/en/about-claude/pricing#fast-mode-pricing",
+            "as_of": "2026-10-09"
+          },
+          "dimension": "speed",
+          "dimension_source": "request_param",
+          "parameter": "speed",
+          "default_value": "standard",
+          "values": [
+            {
+              "value": "standard",
+              "multiplier": "1"
+            },
+            {
+              "value": "fast",
+              "multiplier": "2"
+            }
+          ]
+        },
+        {
+          "type": "geography",
+          "source": {
+            "url": "https://platform.claude.com/docs/en/about-claude/pricing#data-residency-pricing",
+            "as_of": "2026-10-09"
+          },
+          "dimension": "inference_geo",
+          "dimension_source": "request_param",
+          "parameter": "inference_geo",
+          "default_value": "global",
+          "values": [
+            {
+              "value": "global",
+              "multiplier": "1"
+            },
+            {
+              "value": "us",
+              "multiplier": "1.1"
+            }
+          ]
+        },
+        {
+          "type": "per_use_fee",
+          "source": {
+            "url": "https://platform.claude.com/docs/en/about-claude/pricing#web-search-tool",
+            "as_of": "2026-10-09"
+          },
+          "fee_id": "web_search",
+          "usage_field": "usage.server_tool_use.web_search_requests",
+          "unit_price_usd": "0.01",
+          "billed_on_error": false,
+          "max_uses_parameter": "max_uses",
+          "token_multipliers_apply": false
+        },
+        {
+          "type": "per_use_fee",
+          "source": {
+            "url": "https://platform.claude.com/docs/en/about-claude/pricing#web-fetch-tool",
+            "as_of": "2026-10-09"
+          },
+          "fee_id": "web_fetch",
+          "usage_field": "usage.server_tool_use.web_fetch_requests",
+          "unit_price_usd": "0",
+          "billed_on_error": false,
+          "max_uses_parameter": null,
+          "token_multipliers_apply": false
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,18 @@
+{
+  "protocol": "openai_responses",
+  "denial": "upstream_unavailable",
+  "code": "purser_upstream_unavailable",
+  "status": 503,
+  "headers": {
+    "content-type": "application/json",
+    "purser-attempt-id": "35ea7e5c-1d6b-4a2f-9c0e-5b6a7f8e9d0c"
+  },
+  "body": {
+    "error": {
+      "message": "Purser could not reach the upstream provider for this request. Retry later.",
+      "type": "server_error",
+      "param": null,
+      "code": "purser_upstream_unavailable"
+    }
+  }
+}

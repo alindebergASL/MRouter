@@ -1,0 +1,27 @@
+{
+  "class-cost-as-number.json": {
+    "path": "/expected/classes/output/cost_usd",
+    "keyword": "type",
+    "why": "USD amounts are exact-decimal strings even when whole; the JSON number 20 is rejected so no consumer reads money as a number."
+  },
+  "priced-with-unpriced-dimensions.json": {
+    "path": "/expected",
+    "keyword": "additionalProperties",
+    "why": "A case is either priced or unpriced; a priced expectation carrying unpriced_dimensions is contradictory."
+  },
+  "total-nanodollars-float.json": {
+    "path": "",
+    "keyword": "parse:float",
+    "why": "Nano-dollars are an integer; 209000000.0 is a JSON float and money is never a float (6.4)."
+  },
+  "total-nanodollars-string.json": {
+    "path": "/expected/total_nanodollars",
+    "keyword": "type",
+    "why": "total_nanodollars is a 64-bit integer, not a string, so ledgers compare it without parsing text."
+  },
+  "unpriced-without-dimensions.json": {
+    "path": "/expected",
+    "keyword": "required",
+    "why": "An unpriced expectation must name the uncovered dimensions so the test proves why the attempt is unpriced (M5, B3)."
+  }
+}

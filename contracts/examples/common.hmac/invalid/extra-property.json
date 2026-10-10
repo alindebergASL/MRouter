@@ -1,0 +1,6 @@
+{
+  "algorithm": "hmac-sha256",
+  "key_id": "hk_org_acme_2026q4",
+  "digest": "3f1c5e8a9b2d4f6071829a3b4c5d6e7f8091a2b3c4d5e6f708192a3b4c5d6e7f",
+  "message_id": "msg_01ABC"
+}

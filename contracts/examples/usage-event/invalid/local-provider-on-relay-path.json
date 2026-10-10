@@ -1,0 +1,135 @@
+{
+  "schema_version": "0.1.0",
+  "attempt_id": "3c8f5d1b-6e40-4f92-8d32-40516f7e8d93",
+  "revision": 1,
+  "recorded_at": "2026-10-08T17:05:42.880Z",
+  "state": "settled",
+  "dispatched_at": "2026-10-08T17:05:31.402Z",
+  "settled_at": "2026-10-08T17:05:42.861Z",
+  "identity": {
+    "org_id": "org_acme",
+    "workspace_id": "ws_main",
+    "team_id": null,
+    "user_id": "user_031",
+    "device_id": "dev_0063",
+    "virtual_key_id": null,
+    "harness": "opencode",
+    "initiator": "harness"
+  },
+  "correlation": {
+    "session_id": {
+      "value": null,
+      "evidence": "unavailable",
+      "unavailable_reason": "not_reported"
+    },
+    "prompt_id": {
+      "value": null,
+      "evidence": "unavailable",
+      "unavailable_reason": "not_reported"
+    },
+    "provider_request_id": {
+      "value": null,
+      "evidence": "unavailable",
+      "unavailable_reason": "not_reported"
+    },
+    "provider_message_id_hmac": {
+      "value": null,
+      "evidence": "unavailable",
+      "unavailable_reason": "not_reported"
+    },
+    "retry_of_attempt_id": null
+  },
+  "routing": {
+    "provider": "local",
+    "model": "qwen3-coder:30b",
+    "route_id": "route_local_ollama",
+    "route_type": "passthrough",
+    "data_path": "relay",
+    "price_book_version": "pb_2026-09-01.1",
+    "shadow_decision_id": null
+  },
+  "dimensions": {
+    "speed": {
+      "value": null,
+      "unavailable_reason": "not_applicable"
+    },
+    "service_tier": {
+      "value": null,
+      "unavailable_reason": "not_applicable"
+    },
+    "inference_geo": {
+      "value": null,
+      "unavailable_reason": "not_applicable"
+    },
+    "long_context_applied": {
+      "value": null,
+      "unavailable_reason": "not_applicable"
+    }
+  },
+  "tokens": {
+    "uncached_input": {
+      "value": 5200,
+      "evidence": "measured"
+    },
+    "cache_read": {
+      "value": null,
+      "evidence": "unavailable",
+      "unavailable_reason": "not_applicable"
+    },
+    "cache_write_5m": {
+      "value": null,
+      "evidence": "unavailable",
+      "unavailable_reason": "not_applicable"
+    },
+    "cache_write_1h": {
+      "value": null,
+      "evidence": "unavailable",
+      "unavailable_reason": "not_applicable"
+    },
+    "cache_write_unspecified": {
+      "value": null,
+      "evidence": "unavailable",
+      "unavailable_reason": "not_applicable"
+    },
+    "output": {
+      "value": 640,
+      "evidence": "measured"
+    },
+    "reasoning": {
+      "value": null,
+      "evidence": "unavailable",
+      "unavailable_reason": "not_reported"
+    },
+    "cache_write_total": {
+      "value": null,
+      "evidence": "unavailable",
+      "unavailable_reason": "not_applicable"
+    }
+  },
+  "fees": [],
+  "computed_cost": {
+    "nanodollars": null,
+    "evidence": "unavailable",
+    "basis": null,
+    "unavailable_reason": "unpriced",
+    "unpriced_dimensions": [
+      "model"
+    ]
+  },
+  "provider_billed_cost": {
+    "nanodollars": null,
+    "evidence": "unavailable",
+    "unavailable_reason": "not_reported"
+  },
+  "timing": {
+    "ttfb_ms": {
+      "value": 233,
+      "evidence": "measured"
+    },
+    "duration_ms": {
+      "value": 11459,
+      "evidence": "measured"
+    }
+  },
+  "flags": []
+}

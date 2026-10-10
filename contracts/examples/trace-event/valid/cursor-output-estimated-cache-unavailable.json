@@ -1,0 +1,75 @@
+{
+  "schema_version": "0.1.0",
+  "event_id": "171e1b25-0c88-4786-8426-b1d20c838de1",
+  "org_id": "org_acme",
+  "user_id": "user_017",
+  "device_id": "dev_mbp_017",
+  "harness": "cursor",
+  "harness_version": {
+    "value": "1.7.38",
+    "evidence": "measured"
+  },
+  "reader": {
+    "id": "trace-reader.cursor",
+    "version": "0.3.1"
+  },
+  "trace_format": "cursor.state-vscdb.v2",
+  "session_id": {
+    "value": "e27f35d9-9be4-4d94-855a-6de7e18147e5",
+    "evidence": "measured"
+  },
+  "model": {
+    "value": "composer-1",
+    "evidence": "measured"
+  },
+  "occurred_at": {
+    "value": "2026-10-08T15:21:04.090Z",
+    "evidence": "measured"
+  },
+  "observed_at": "2026-10-08T15:22:00Z",
+  "tokens": {
+    "uncached_input": {
+      "value": 18400,
+      "evidence": "estimated"
+    },
+    "cache_read": {
+      "value": null,
+      "evidence": "unavailable",
+      "unavailable_reason": "not_reported"
+    },
+    "cache_write_5m": {
+      "value": null,
+      "evidence": "unavailable",
+      "unavailable_reason": "not_reported"
+    },
+    "cache_write_1h": {
+      "value": null,
+      "evidence": "unavailable",
+      "unavailable_reason": "not_reported"
+    },
+    "cache_write_unspecified": {
+      "value": null,
+      "evidence": "unavailable",
+      "unavailable_reason": "not_reported"
+    },
+    "output": {
+      "value": 1350,
+      "evidence": "estimated"
+    },
+    "reasoning": {
+      "value": null,
+      "evidence": "unavailable",
+      "unavailable_reason": "not_reported"
+    },
+    "cache_write_total": {
+      "value": null,
+      "evidence": "unavailable",
+      "unavailable_reason": "not_reported"
+    }
+  },
+  "provider_message_id_hmac": {
+    "value": null,
+    "evidence": "unavailable",
+    "unavailable_reason": "not_reported"
+  }
+}

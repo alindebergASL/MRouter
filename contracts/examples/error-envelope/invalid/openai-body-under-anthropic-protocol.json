@@ -1,0 +1,18 @@
+{
+  "protocol": "anthropic_messages",
+  "denial": "policy_denied",
+  "code": "purser_policy_denied",
+  "status": 403,
+  "headers": {
+    "content-type": "application/json",
+    "purser-attempt-id": "8a3b6f4d-0e5c-4b1a-8d9f-4c5b6a7f8e9d"
+  },
+  "body": {
+    "error": {
+      "message": "Purser destination policy does not allow this request to reach this provider or model.",
+      "type": "permission_error",
+      "param": null,
+      "code": "purser_policy_denied"
+    }
+  }
+}

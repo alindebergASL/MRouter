@@ -1,0 +1,50 @@
+{
+  "schema_version": "0.1.0",
+  "decision_id": "b1c2d3e4-f5a6-4b78-9c0d-1e2f3a4b5c6d",
+  "actuator": "harness_hook",
+  "decided_at": "2026-10-08T14:20:44.310Z",
+  "mode": "live",
+  "policy_version": "policy_v12",
+  "episode": {
+    "kind": "harness_prompt",
+    "session_id": "sess_7f3a91",
+    "prompt_id": "prompt_0043"
+  },
+  "attempt_id": null,
+  "route": {
+    "route_id": "route_alias_fast",
+    "route_type": "tier_alias"
+  },
+  "input_features": {
+    "request_class": "main",
+    "requested_model": "fast",
+    "turn_index": {
+      "value": 0,
+      "evidence": "measured"
+    },
+    "context_tokens": {
+      "value": 18000,
+      "evidence": "inferred"
+    },
+    "tool_calls_in_context": {
+      "value": 0,
+      "evidence": "measured"
+    },
+    "tool_errors_in_context": {
+      "value": 0,
+      "evidence": "measured"
+    },
+    "consecutive_bad_turns": {
+      "value": 0,
+      "evidence": "measured"
+    }
+  },
+  "decision_model": null,
+  "decision_model_output": null,
+  "escalation": null,
+  "chosen_target": {
+    "provider": "anthropic",
+    "model": "claude-haiku-4-5",
+    "tier": "fast"
+  }
+}

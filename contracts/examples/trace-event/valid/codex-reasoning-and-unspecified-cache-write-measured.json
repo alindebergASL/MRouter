@@ -1,0 +1,74 @@
+{
+  "schema_version": "0.1.0",
+  "event_id": "04ab4386-1d54-4865-b133-ac14e4f82029",
+  "org_id": "org_acme",
+  "user_id": "user_042",
+  "device_id": "dev_linux_042",
+  "harness": "codex",
+  "harness_version": {
+    "value": "0.48.0",
+    "evidence": "measured"
+  },
+  "reader": {
+    "id": "trace-reader.codex",
+    "version": "0.3.1"
+  },
+  "trace_format": "codex.rollout-jsonl.v2",
+  "session_id": {
+    "value": "39f954c4-9434-4d29-8233-c0ff8e5dbbf1",
+    "evidence": "measured"
+  },
+  "model": {
+    "value": "gpt-5.6",
+    "evidence": "measured"
+  },
+  "occurred_at": {
+    "value": "2026-10-08T16:45:12.300Z",
+    "evidence": "measured"
+  },
+  "observed_at": "2026-10-08T16:45:13Z",
+  "tokens": {
+    "uncached_input": {
+      "value": 6200,
+      "evidence": "inferred"
+    },
+    "cache_read": {
+      "value": 41000,
+      "evidence": "measured"
+    },
+    "cache_write_5m": {
+      "value": null,
+      "evidence": "unavailable",
+      "unavailable_reason": "not_applicable"
+    },
+    "cache_write_1h": {
+      "value": null,
+      "evidence": "unavailable",
+      "unavailable_reason": "not_applicable"
+    },
+    "cache_write_unspecified": {
+      "value": 4096,
+      "evidence": "measured"
+    },
+    "output": {
+      "value": 4800,
+      "evidence": "measured"
+    },
+    "reasoning": {
+      "value": 3200,
+      "evidence": "measured"
+    },
+    "cache_write_total": {
+      "value": 4096,
+      "evidence": "measured"
+    }
+  },
+  "provider_message_id_hmac": {
+    "value": {
+      "algorithm": "hmac-sha256",
+      "key_id": "hmackey_org_acme_2026q4",
+      "digest": "f8249f1ac83731f4a385efe28e115518eeef910434e05443c83d8f581143cfdf"
+    },
+    "evidence": "measured"
+  }
+}

@@ -1,0 +1,28 @@
+{
+  "protocol": "anthropic_messages",
+  "denial": "budget_exceeded",
+  "code": "purser_budget_exceeded",
+  "status": 429,
+  "headers": {
+    "content-type": "application/json",
+    "purser-attempt-id": "5d0e3c1a-7b2f-4e8d-9a6c-1f2e3d4c5b6a",
+    "retry-after": "54000"
+  },
+  "body": {
+    "type": "error",
+    "error": {
+      "type": "rate_limit_error",
+      "message": "Purser budget exceeded for this window. retry-after gives the seconds until the window resets.",
+      "details": {
+        "error_code": "purser_budget_exceeded",
+        "purser": {
+          "scope": "team",
+          "window": "day",
+          "window_resets_at": "2026-10-10T00:00:00Z",
+          "ceiling_nanodollars": 1425000000,
+          "remaining_nanodollars": 5000000000
+        }
+      }
+    }
+  }
+}

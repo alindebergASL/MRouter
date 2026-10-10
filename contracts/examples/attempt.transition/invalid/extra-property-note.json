@@ -1,0 +1,5 @@
+{
+  "from": "reserved",
+  "to": "dispatched",
+  "note": "operator override"
+}

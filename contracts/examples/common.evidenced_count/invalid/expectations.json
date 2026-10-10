@@ -1,0 +1,27 @@
+{
+  "measured-null.json": {
+    "path": "/value",
+    "keyword": "not",
+    "why": "A measured value is present; null would hide that it was never measured (6.5)."
+  },
+  "measured-with-reason.json": {
+    "path": "",
+    "keyword": "not",
+    "why": "Only an unavailable value has an unavailable_reason."
+  },
+  "missing-evidence.json": {
+    "path": "",
+    "keyword": "required",
+    "why": "Every value carries its evidence tier (6.5)."
+  },
+  "negative-count.json": {
+    "path": "/value",
+    "keyword": "oneOf",
+    "why": "Counts are never negative."
+  },
+  "unavailable-given-as-zero.json": {
+    "path": "/value",
+    "keyword": "type",
+    "why": "Unavailable is null with a reason, never 0 (6.5)."
+  }
+}

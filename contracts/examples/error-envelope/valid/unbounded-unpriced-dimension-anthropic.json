@@ -1,0 +1,20 @@
+{
+  "protocol": "anthropic_messages",
+  "denial": "request_unbounded",
+  "code": "purser_unbounded_unpriced_dimension",
+  "status": 400,
+  "headers": {
+    "content-type": "application/json",
+    "purser-attempt-id": "bd6e9c7a-3b8f-4e4d-9a2c-7f8e9d0c1b2a"
+  },
+  "body": {
+    "type": "error",
+    "error": {
+      "type": "invalid_request_error",
+      "message": "Purser cannot bound the cost of this request: its speed, service tier, geography, long-context tier, or a token class it can incur has no price-book rule.",
+      "details": {
+        "error_code": "purser_unbounded_unpriced_dimension"
+      }
+    }
+  }
+}

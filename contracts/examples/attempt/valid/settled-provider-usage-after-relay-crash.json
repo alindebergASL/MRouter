@@ -1,0 +1,37 @@
+{
+  "schema_version": "0.1.0",
+  "attempt_id": "5ea17f3d-8062-4b13-8f54-62738190afb5",
+  "state": "settled",
+  "reserved_at": "2026-10-09T15:01:12.300Z",
+  "ceiling_nanodollars": 1300000000,
+  "budget_window_ids": [
+    "win-org_acme-month-2026-10",
+    "win-team_platform-day-2026-10-09",
+    "win-user_017-day-2026-10-09"
+  ],
+  "price_book_version": "pb-2026-10-07",
+  "retry_of_attempt_id": null,
+  "transitions": [
+    {
+      "from": "reserved",
+      "to": "dispatched",
+      "at": "2026-10-09T15:01:12.314Z"
+    },
+    {
+      "from": "dispatched",
+      "to": "unknown",
+      "at": "2026-10-09T15:01:40.902Z"
+    },
+    {
+      "from": "unknown",
+      "to": "settled",
+      "at": "2026-10-09T16:05:00.118Z"
+    }
+  ],
+  "unknown_reason": "relay_crash",
+  "settlement": {
+    "basis": "provider_usage_by_request_id",
+    "cost_nanodollars": 412375000,
+    "overrun": false
+  }
+}

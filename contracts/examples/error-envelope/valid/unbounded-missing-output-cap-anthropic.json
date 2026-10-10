@@ -1,0 +1,20 @@
+{
+  "protocol": "anthropic_messages",
+  "denial": "request_unbounded",
+  "code": "purser_unbounded_missing_output_cap",
+  "status": 400,
+  "headers": {
+    "content-type": "application/json",
+    "purser-attempt-id": "df8a1e9c-5d0b-4a6f-9c4e-9b0a1f2e3d4c"
+  },
+  "body": {
+    "type": "error",
+    "error": {
+      "type": "invalid_request_error",
+      "message": "Purser cannot bound the cost of this request: set an output token cap (max_tokens, max_completion_tokens, or max_output_tokens).",
+      "details": {
+        "error_code": "purser_unbounded_missing_output_cap"
+      }
+    }
+  }
+}

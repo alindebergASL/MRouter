@@ -1,0 +1,90 @@
+{
+  "anthropic-body-under-openai-protocol.json": {
+    "path": "/body",
+    "keyword": "not",
+    "why": "The body must be in the client's protocol so the harness parses it natively (B4)."
+  },
+  "budget-denial-without-retry-after.json": {
+    "path": "/headers",
+    "keyword": "required",
+    "why": "A 429 budget denial carries retry-after, the integer seconds until the window resets (B4)."
+  },
+  "budget-detail-on-policy-denial.json": {
+    "path": "/body/error/details",
+    "keyword": "not",
+    "why": "Budget figures belong only to budget denials; a policy denial reveals no budget (A4)."
+  },
+  "ceiling-as-string.json": {
+    "path": "/body/error/details/purser/ceiling_nanodollars",
+    "keyword": "type",
+    "why": "Money is an integer number of nano-dollars, never a string (6.4)."
+  },
+  "day-window-resetting-midday.json": {
+    "path": "/body/error/details/purser/window_resets_at",
+    "keyword": "pattern",
+    "why": "Windows are UTC calendar days or months (7.1), so retry-after counts to midnight (B4)."
+  },
+  "extra-body-key.json": {
+    "path": "/body",
+    "keyword": "additionalProperties",
+    "why": "The body is closed; an extra key could carry request content (C2).",
+    "also": [
+      {
+        "path": "/body",
+        "keyword": "unevaluatedProperties"
+      }
+    ]
+  },
+  "message-echoes-request.json": {
+    "path": "/body/error/message",
+    "keyword": "enum",
+    "why": "Messages are fixed templates; a message built from the request could carry its content (C2).",
+    "also": [
+      {
+        "path": "/body/error/message",
+        "keyword": "const"
+      }
+    ]
+  },
+  "openai-body-missing-param.json": {
+    "path": "/body/error",
+    "keyword": "required",
+    "why": "OpenAI's error object always has message, type, param, and code; clients read all four."
+  },
+  "openai-body-under-anthropic-protocol.json": {
+    "path": "/body",
+    "keyword": "required",
+    "why": "Claude Code reads Anthropic's error shape; an OpenAI-shaped body would not parse natively (B4)."
+  },
+  "openai-budget-denial-as-rate-limit.json": {
+    "path": "/body/error/type",
+    "keyword": "enum",
+    "why": "Codex stops retrying only on insufficient_quota; any other 429 type makes it sleep and retry (B4).",
+    "also": [
+      {
+        "path": "/body/error/type",
+        "keyword": "const"
+      }
+    ]
+  },
+  "policy-denial-as-429.json": {
+    "path": "/status",
+    "keyword": "const",
+    "why": "A policy denial is 403 (C3); a 429 would make harnesses retry a request that can never pass."
+  },
+  "remaining-not-below-ceiling.json": {
+    "path": "",
+    "keyword": "semantic:budget_remaining_below_ceiling",
+    "why": "A strict budget denies only when remaining is below the ceiling (7.6 step 2); otherwise the request fits."
+  },
+  "retry-after-on-unbounded-denial.json": {
+    "path": "/headers",
+    "keyword": "not",
+    "why": "An unbounded request fails the same way on retry, so a 400 never invites one."
+  },
+  "retry-after-zero-on-budget-denial.json": {
+    "path": "/headers/retry-after",
+    "keyword": "pattern",
+    "why": "retry-after rounds up and is at least 1; 0 would make clients retry into the same exhausted window (B4)."
+  }
+}

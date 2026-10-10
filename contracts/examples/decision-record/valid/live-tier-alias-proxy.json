@@ -1,0 +1,49 @@
+{
+  "schema_version": "0.1.0",
+  "decision_id": "5bc2d3e4-f5a6-4178-8c9d-0e1f2a3b4c5d",
+  "actuator": "proxy",
+  "decided_at": "2026-10-08T14:02:40.530Z",
+  "mode": "live",
+  "policy_version": "policy_v12",
+  "episode": {
+    "kind": "harness_session",
+    "session_id": "sess_5d20c4"
+  },
+  "attempt_id": "6cd3e4f5-a6b7-4289-9d0e-1f2a3b4c5d6e",
+  "route": {
+    "route_id": "route_alias_fast",
+    "route_type": "tier_alias"
+  },
+  "input_features": {
+    "request_class": "subagent",
+    "requested_model": "fast",
+    "turn_index": {
+      "value": 1,
+      "evidence": "measured"
+    },
+    "context_tokens": {
+      "value": 9120,
+      "evidence": "measured"
+    },
+    "tool_calls_in_context": {
+      "value": 2,
+      "evidence": "measured"
+    },
+    "tool_errors_in_context": {
+      "value": 0,
+      "evidence": "measured"
+    },
+    "consecutive_bad_turns": {
+      "value": 0,
+      "evidence": "measured"
+    }
+  },
+  "decision_model": null,
+  "decision_model_output": null,
+  "escalation": null,
+  "chosen_target": {
+    "provider": "anthropic",
+    "model": "claude-haiku-4-5",
+    "tier": "fast"
+  }
+}

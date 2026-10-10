@@ -1,0 +1,20 @@
+{
+  "protocol": "anthropic_messages",
+  "denial": "request_unbounded",
+  "code": "purser_unbounded_unpriced_cache_ttl",
+  "status": 400,
+  "headers": {
+    "content-type": "application/json",
+    "purser-attempt-id": "02bd4b2f-8a3e-4d9c-8f7b-2e3d4c5b6a7f"
+  },
+  "body": {
+    "type": "error",
+    "error": {
+      "type": "invalid_request_error",
+      "message": "Purser cannot bound the cost of this request: a requested cache TTL has no price-book rule.",
+      "details": {
+        "error_code": "purser_unbounded_unpriced_cache_ttl"
+      }
+    }
+  }
+}

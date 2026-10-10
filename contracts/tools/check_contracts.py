@@ -11,7 +11,8 @@ pinned dependencies in contracts/tools/requirements.txt. Checks, in order:
    guarantee IDs that reference it, each of which exists in docs/architecture.md.
 3. Every example directory has valid and invalid examples. Valid ones pass. Each
    invalid one fails, and every error it raises is the one named for it in
-   invalid/expectations.json, so an example can't fail for an accidental reason.
+   invalid/expectations.json (plus any it lists under "also" because the same mistake
+   necessarily breaks them), so an example can't fail for an accidental reason.
    Cross-field rules a schema cannot express (listed in its root $comment) are
    checked too; an invalid example targets one with keyword "semantic:<rule>".
 4. No JSON under contracts/ holds a float, NaN, Infinity, or a duplicate key, so
@@ -403,12 +404,18 @@ def check_examples(
                 continue
             if not errors:
                 failures.add(rel(path), "invalid example passes validation")
+            # "also" lists further (path, keyword) pairs the same mistake necessarily breaks, such
+            # as a message that is outside both the template enum and its code's const.
+            allowed = [(expected["path"], keyword)] + [(a["path"], a["keyword"]) for a in expected.get("also", [])]
             for error in errors:
-                if not error_matches(error, expected["path"], keyword):
+                if not any(error_matches(error, p, k) for p, k in allowed):
                     failures.add(
                         rel(path),
                         f"fails for an unexpected reason (want {expected['path']} [{keyword}]): {describe(error)}",
                     )
+            for p, k in allowed:
+                if errors and not any(error_matches(error, p, k) for error in errors):
+                    failures.add(rel(path), f"expected an error at {p or '/'} [{k}], but none was raised")
     for name in sorted(schemas.keys() - covered):
         failures.add(rel(EXAMPLES), f"no examples for schema {name}")
     for name in sorted(schemas.keys() - {COMMON}):

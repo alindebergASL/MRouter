@@ -1,0 +1,72 @@
+{
+  "boolean-output-without-value-or-probability.json": {
+    "path": "/decision_model_output",
+    "keyword": "anyOf",
+    "why": "A boolean decision output must carry a boolean value or a probability_true; with both null the decision cannot be replayed (R1)."
+  },
+  "choice-selected-free-text.json": {
+    "path": "/decision_model_output/selected",
+    "keyword": "pattern",
+    "why": "selected is an option ID with no whitespace, so the decision model's free-text answer can never be stored (C2)."
+  },
+  "classifier-in-live-mode.json": {
+    "path": "/mode",
+    "keyword": "const",
+    "why": "Classifier routes are shadow-only in v1 and must never change what is sent upstream (8.1, R2)."
+  },
+  "decision-model-without-output.json": {
+    "path": "/decision_model_output",
+    "keyword": "oneOf",
+    "why": "A recorded decision model must come with its structured output, or replay cannot reproduce the chosen target (8.5 change 1, R1)."
+  },
+  "feature-evidence-estimated.json": {
+    "path": "/input_features/context_tokens/evidence",
+    "keyword": "enum",
+    "why": "Input features are read from or derived exactly from the request, so their evidence is measured, inferred, or unavailable, never estimated."
+  },
+  "free-text-rationale-property.json": {
+    "path": "/decision_model_output",
+    "keyword": "additionalProperties",
+    "why": "The decision output is a closed object, so a free-text rationale from the decision model has nowhere to go (C2)."
+  },
+  "harness-hook-in-live-mode.json": {
+    "path": "/mode",
+    "keyword": "const",
+    "why": "Harness-hook recommendations are shadow-only in v1, even on a route type that may be live at the proxy (8.2)."
+  },
+  "input-feature-outside-closed-set.json": {
+    "path": "/input_features",
+    "keyword": "additionalProperties",
+    "why": "The v0 feature set is closed: adding a feature is a schema change, so a feature can never smuggle in text (8.2)."
+  },
+  "output-without-decision-model.json": {
+    "path": "/decision_model_output",
+    "keyword": "type",
+    "why": "An output with no recorded decision model has no pinned model ID or version to replay against (8.5 changes 1 and 2)."
+  },
+  "probability-above-one.json": {
+    "path": "/decision_model_output/probability_true",
+    "keyword": "pattern",
+    "why": "A probability is an exact decimal string in [0, 1]; 1.5 is out of range."
+  },
+  "probability-as-json-float.json": {
+    "path": "",
+    "keyword": "parse:float",
+    "why": "Probabilities are exact-decimal strings, never JSON floats, so replay compares the same exact value everywhere."
+  },
+  "stage-route-in-live-mode.json": {
+    "path": "/mode",
+    "keyword": "const",
+    "why": "Stage routes are shadow-only in v1; only passthrough and tier-alias routes change traffic (8.1, R2)."
+  },
+  "unavailable-feature-given-as-zero.json": {
+    "path": "/input_features/tool_calls_in_context/value",
+    "keyword": "type",
+    "why": "An unavailable feature is null with a reason, never zero, so a missing signal cannot read as a measured zero."
+  },
+  "workagent-episode-missing-run-id.json": {
+    "path": "/episode",
+    "keyword": "required",
+    "why": "A WorkAgent episode is the assignment and the run together; without run_id, acceptance cannot be attributed to it (8.4)."
+  }
+}

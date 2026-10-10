@@ -98,8 +98,19 @@
       "then": {"properties": {"state": {"enum": ["unknown", "settled"]}}}
     },
     {
+      "$comment": "A settled attempt took one of the two settled paths and has a settlement.",
       "if": {"properties": {"state": {"const": "settled"}}, "required": ["state"]},
-      "then": {"required": ["settlement"]},
+      "then": {
+        "required": ["settlement"],
+        "properties": {
+          "transitions": {
+            "oneOf": [
+              {"$ref": "#/$defs/path_settled_from_response"},
+              {"$ref": "#/$defs/path_settled_from_unknown"}
+            ]
+          }
+        }
+      },
       "else": {"not": {"required": ["settlement"]}}
     },
     {
@@ -111,7 +122,11 @@
         "required": ["settlement"]
       },
       "then": {
-        "properties": {"transitions": {"$ref": "#/$defs/path_settled_from_response"}},
+        "properties": {
+          "transitions": {
+            "not": {"contains": {"properties": {"to": {"const": "unknown"}}, "required": ["to"]}}
+          }
+        },
         "not": {"required": ["unknown_reason"]}
       }
     },
@@ -129,7 +144,9 @@
         "required": ["settlement"]
       },
       "then": {
-        "properties": {"transitions": {"$ref": "#/$defs/path_settled_from_unknown"}},
+        "properties": {
+          "transitions": {"contains": {"properties": {"to": {"const": "unknown"}}, "required": ["to"]}}
+        },
         "required": ["unknown_reason"]
       }
     },
