@@ -34,6 +34,9 @@ jobs:
           echo "select 1 -> $out"
           test "$out" = "1"
 
+      - name: Keycloak dev realm (issuer, token claims, admin events)
+        run: make dev-check
+
       - name: Show stack logs
         if: failure()
         run: docker compose -f deploy/compose/dev.yaml logs --no-color
