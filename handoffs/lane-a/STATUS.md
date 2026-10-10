@@ -1,12 +1,12 @@
 # Lane A: Spec and proof — STATUS
 
-Updated: 2026-10-10 by the Lane A Phase 0 task 2 session (contracts v0, after two review rounds)
+Updated: 2026-10-10 by the Lane A Phase 0 task 2 session (close-out after contracts v0 merged)
 Scope: contracts/, acceptance tests, the certification lab, the Compose dev stack, CI (build plan §5).
 
 ## Done
 - **Task 1 (merged):** repo skeleton, `CLAUDE.md` files, hooks, subagents, CODEOWNERS, spec-guard, CI,
   the Compose dev stack (Postgres 18.6), `scripts/cloud-setup.sh`, handoff files, ADRs 0001 and 0002.
-- **Task 2 (in review, branch `claude/youthful-shannon-0piszb`, label `spec-change`):** `contracts/` v0.
+- **Task 2 (merged, alindebergASL/MRouter#9, 2026-10-10):** `contracts/` v0.
   - Schemas, all 0.1.0, draft 2020-12: `common`, `usage-event`, `attempt`, `error-envelope`,
     `price-book`, `price-fixture`, `decision-record`, `trace-event`. The README table lists the
     guarantees that reference each one.
@@ -24,28 +24,31 @@ Scope: contracts/, acceptance tests, the certification lab, the Compose dev stac
     - denial bodies against OpenCode's retry triggers;
     - fixture arithmetic.
   - ADR 0004 (contract conventions), proposed.
+- **spec-guard's label gate, verified on #9.** On commit `ad859a6`, run 23 failed with "This pull
+  request changes protected paths but lacks the 'spec-change' label". Run 24, on the same commit
+  after the label was added, passed.
+- **Repository settings (Andrew, 2026-10-09):**
+  - Secret scanning and push protection are on.
+  - `main` is protected by the `protect-main` ruleset, with `spec-guard`, `dev-stack`, and `checks`
+    as required checks.
 
 ## Next
-1. Resolve the open questions listed in the task 2 PR. They decide:
+1. Task 3: the recorder. Before the first recording, check which egress path attaches the
+   environment's API credentials (see "Not yet verified" in `deploy/compose/README.md`).
+2. Resolve the open questions listed in #9 (Andrew decides). They decide:
    - two attempt transitions;
    - the evidence tier of ceiling charges;
    - four error-mapping details;
    - whether harness session IDs are hashed.
 
    Each answer is a small spec-change follow-up.
-2. After task 1's spec-guard is a required check: confirm on the task 2 PR that spec-guard fails
-   without `spec-change` and passes with it.
-3. Task 3: the recorder. Before the first recording, check which egress path attaches the
-   environment's API credentials (see "Not yet verified" in `deploy/compose/README.md`).
-4. Acceptance tests that use the contracts:
+3. Acceptance tests that use the contracts:
    - M5 against `fixtures/pricing/`, once Lane B's oracle exists;
    - C4's schema check, which is the no-free-text lint, wrapped as `test_C4_*`;
    - B3 and B4 denial-shape tests against `error-envelope`.
 
 ## Blocked
-- Nothing in this lane. Andrew to do: add the `spec-change` label to the task 2 PR; decide the open
-  questions; enable secret scanning and push protection; protect `main` with required checks
-  `spec-guard`, `dev-stack`, and `checks`.
+- Nothing.
 
 ## Guarantee tests passing
 
