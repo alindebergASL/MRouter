@@ -10,4 +10,5 @@ Repository tooling. Each script is runnable from any directory.
 | `check-protect-spec.sh` | Self-test for `.claude/hooks/protect-spec.sh` over every protected path. |
 | `check-dev-keycloak.sh` | Smoke-checks the dev stack's Keycloak: issuer, token claims, admin-event retention, admin-API client scope (`make dev-check`). |
 | `dev-token.sh` | Prints a dev-realm access token for alice or bob (`make dev-token WHO=…`). |
+| `retry.sh` | Retries a command with backoff; `make dev-up` and `make cp-image` pull images through it, since public registries rate-limit anonymous pulls. |
 | `actionlint.sh` | Runs actionlint on the workflows from a pinned, checksum-verified GitHub release (cached in `.cache/`). |

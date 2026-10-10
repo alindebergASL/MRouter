@@ -16,6 +16,7 @@ help: ## List targets
 	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  %-12s %s\n", $$1, $$2}'
 
 dev-up: ## Start the dev stack and wait until every service is healthy
+	scripts/retry.sh 5 $(COMPOSE) pull --quiet
 	$(COMPOSE) up -d --wait --wait-timeout 300
 
 dev-down: ## Stop the dev stack (keeps data volumes)
@@ -78,6 +79,8 @@ CA_BUILD_SECRET := --secret id=egress-ca,src=$(EGRESS_CA)
 CANARY_FILES := controlplane/src/purser_controlplane/.env.canary controlplane/.env.canary
 
 cp-image: ## Control plane: build the image (deploy/images/controlplane/Dockerfile)
+	@for base in $$(sed -nE 's/^FROM[[:space:]]+([^[:space:]]+@sha256:[0-9a-f]+).*/\1/p' deploy/images/controlplane/Dockerfile); do \
+	  scripts/retry.sh 5 docker pull --quiet "$$base" >/dev/null; done
 	@if [ -n "$${PURSER_BUILD_CANARY:-}" ]; then \
 	  for f in $(CANARY_FILES); do printf '%s\n' "$$PURSER_BUILD_CANARY" > "$$f"; done; fi
 	docker build -f deploy/images/controlplane/Dockerfile -t $(CP_IMAGE) \
