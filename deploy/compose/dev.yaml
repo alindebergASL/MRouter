@@ -247,7 +247,10 @@ services:
     working_dir: /src/console
     entrypoint: ["/src/console/scripts/run.sh"]
     volumes:
-      - ../..:/src
+      # The generator and its dependencies are third-party code: the repository
+      # is read-only to them, and only console/ is writable.
+      - ../..:/src:ro
+      - ../../console:/src/console
       # node_modules stays in a volume, out of the working tree.
       - console-node-modules:/src/console/node_modules
     environment:

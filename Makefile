@@ -4,7 +4,7 @@
 # (deploy/compose/cloud.override.yaml). Elsewhere the file doesn't exist.
 EGRESS_CA := $(wildcard /root/.ccr/ca-bundle.crt)
 COMPOSE := docker compose -f deploy/compose/dev.yaml $(if $(EGRESS_CA),-f deploy/compose/cloud.override.yaml)
-SHELL_SCRIPTS := $(wildcard scripts/*.sh .claude/hooks/*.sh controlplane/scripts/*.sh)
+SHELL_SCRIPTS := $(wildcard scripts/*.sh .claude/hooks/*.sh controlplane/scripts/*.sh console/scripts/*.sh)
 
 .DEFAULT_GOAL := help
 .PHONY: help dev-up dev-down dev-reset dev-ps dev-logs dev-psql dev-check dev-token \
