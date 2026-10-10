@@ -6,14 +6,14 @@
   "type": "object",
   "required": ["schema_version", "fixture_id", "referenced_by", "price_book", "request", "usage", "expected"],
   "properties": {
-    "schema_version": { "$ref": "urn:purser:contracts:common:0.1.0#/$defs/schema_version" },
-    "fixture_id": { "$ref": "urn:purser:contracts:common:0.1.0#/$defs/id" },
+    "schema_version": {"$ref": "urn:purser:contracts:common:0.1.0#/$defs/schema_version"},
+    "fixture_id": {"$ref": "urn:purser:contracts:common:0.1.0#/$defs/id"},
     "referenced_by": {
       "description": "Guarantee IDs whose acceptance tests use this fixture.",
       "type": "array",
       "minItems": 1,
       "uniqueItems": true,
-      "items": { "enum": ["M2", "M5", "B3", "B6", "P1"] }
+      "items": {"enum": ["M2", "M5", "B3", "B6", "P1"]}
     },
     "price_book": {
       "type": "object",
@@ -25,8 +25,8 @@
           "pattern": "^[a-z0-9][a-z0-9.-]{0,100}[.]json$",
           "maxLength": 106
         },
-        "price_book_version": { "$ref": "urn:purser:contracts:common:0.1.0#/$defs/id" },
-        "entry_id": { "$ref": "urn:purser:contracts:common:0.1.0#/$defs/id" }
+        "price_book_version": {"$ref": "urn:purser:contracts:common:0.1.0#/$defs/id"},
+        "entry_id": {"$ref": "urn:purser:contracts:common:0.1.0#/$defs/id"}
       },
       "additionalProperties": false
     },
@@ -35,23 +35,23 @@
       "type": "object",
       "required": ["provider", "model", "at", "org_id", "dimensions"],
       "properties": {
-        "provider": { "$ref": "urn:purser:contracts:common:0.1.0#/$defs/provider" },
-        "model": { "$ref": "urn:purser:contracts:common:0.1.0#/$defs/model_id" },
+        "provider": {"$ref": "urn:purser:contracts:common:0.1.0#/$defs/provider"},
+        "model": {"$ref": "urn:purser:contracts:common:0.1.0#/$defs/model_id"},
         "at": {
           "description": "When the reservation committed, which selects effective entries and promotions (P1).",
           "$ref": "urn:purser:contracts:common:0.1.0#/$defs/rfc3339_utc"
         },
         "org_id": {
           "description": "The org, for negotiated rates; null when none apply.",
-          "oneOf": [{ "$ref": "urn:purser:contracts:common:0.1.0#/$defs/id" }, { "type": "null" }]
+          "oneOf": [{"$ref": "urn:purser:contracts:common:0.1.0#/$defs/id"}, {"type": "null"}]
         },
         "dimensions": {
           "type": "object",
           "required": ["speed", "service_tier", "inference_geo"],
           "properties": {
-            "speed": { "$ref": "#/$defs/raw_value" },
-            "service_tier": { "$ref": "#/$defs/raw_value" },
-            "inference_geo": { "$ref": "#/$defs/raw_value" }
+            "speed": {"$ref": "#/$defs/raw_value"},
+            "service_tier": {"$ref": "#/$defs/raw_value"},
+            "inference_geo": {"$ref": "#/$defs/raw_value"}
           },
           "additionalProperties": false
         }
@@ -63,7 +63,7 @@
       "type": "object",
       "required": ["tokens", "fees"],
       "properties": {
-        "tokens": { "$ref": "#/$defs/class_counts" },
+        "tokens": {"$ref": "#/$defs/class_counts"},
         "fees": {
           "type": "array",
           "maxItems": 16,
@@ -71,8 +71,8 @@
             "type": "object",
             "required": ["fee_id", "count"],
             "properties": {
-              "fee_id": { "$ref": "urn:purser:contracts:common:0.1.0#/$defs/id" },
-              "count": { "$ref": "urn:purser:contracts:common:0.1.0#/$defs/token_count" }
+              "fee_id": {"$ref": "urn:purser:contracts:common:0.1.0#/$defs/id"},
+              "count": {"$ref": "urn:purser:contracts:common:0.1.0#/$defs/token_count"}
             },
             "additionalProperties": false
           }
@@ -80,25 +80,28 @@
       },
       "additionalProperties": false
     },
-    "expected": {
-      "oneOf": [{ "$ref": "#/$defs/priced" }, { "$ref": "#/$defs/unpriced" }]
-    }
+    "expected": {"oneOf": [{"$ref": "#/$defs/priced"}, {"$ref": "#/$defs/unpriced"}]}
   },
   "additionalProperties": false,
   "$defs": {
-    "raw_value": {
-      "oneOf": [{ "$ref": "urn:purser:contracts:common:0.1.0#/$defs/id" }, { "type": "null" }]
-    },
+    "raw_value": {"oneOf": [{"$ref": "urn:purser:contracts:common:0.1.0#/$defs/id"}, {"type": "null"}]},
     "class_counts": {
       "type": "object",
-      "required": ["uncached_input", "cache_read", "cache_write_5m", "cache_write_1h", "cache_write_unspecified", "output"],
+      "required": [
+        "uncached_input",
+        "cache_read",
+        "cache_write_5m",
+        "cache_write_1h",
+        "cache_write_unspecified",
+        "output"
+      ],
       "properties": {
-        "uncached_input": { "$ref": "urn:purser:contracts:common:0.1.0#/$defs/token_count" },
-        "cache_read": { "$ref": "urn:purser:contracts:common:0.1.0#/$defs/token_count" },
-        "cache_write_5m": { "$ref": "urn:purser:contracts:common:0.1.0#/$defs/token_count" },
-        "cache_write_1h": { "$ref": "urn:purser:contracts:common:0.1.0#/$defs/token_count" },
-        "cache_write_unspecified": { "$ref": "urn:purser:contracts:common:0.1.0#/$defs/token_count" },
-        "output": { "$ref": "urn:purser:contracts:common:0.1.0#/$defs/token_count" }
+        "uncached_input": {"$ref": "urn:purser:contracts:common:0.1.0#/$defs/token_count"},
+        "cache_read": {"$ref": "urn:purser:contracts:common:0.1.0#/$defs/token_count"},
+        "cache_write_5m": {"$ref": "urn:purser:contracts:common:0.1.0#/$defs/token_count"},
+        "cache_write_1h": {"$ref": "urn:purser:contracts:common:0.1.0#/$defs/token_count"},
+        "cache_write_unspecified": {"$ref": "urn:purser:contracts:common:0.1.0#/$defs/token_count"},
+        "output": {"$ref": "urn:purser:contracts:common:0.1.0#/$defs/token_count"}
       },
       "additionalProperties": false
     },
@@ -106,7 +109,7 @@
       "type": "object",
       "required": ["tokens", "rate_usd_per_mtok", "cost_usd"],
       "properties": {
-        "tokens": { "$ref": "urn:purser:contracts:common:0.1.0#/$defs/token_count" },
+        "tokens": {"$ref": "urn:purser:contracts:common:0.1.0#/$defs/token_count"},
         "rate_usd_per_mtok": {
           "description": "Effective rate after stacking (6.3).",
           "$ref": "urn:purser:contracts:common:0.1.0#/$defs/decimal"
@@ -122,19 +125,19 @@
       "type": "object",
       "required": ["priced", "rounding", "classes", "fees", "total_usd", "total_nanodollars"],
       "properties": {
-        "priced": { "const": true },
-        "rounding": { "const": "half_up" },
+        "priced": {"const": true},
+        "rounding": {"const": "half_up"},
         "classes": {
           "description": "Every token class the usage incurs (non-zero count).",
           "type": "object",
           "minProperties": 1,
           "properties": {
-            "uncached_input": { "$ref": "#/$defs/class_cost" },
-            "cache_read": { "$ref": "#/$defs/class_cost" },
-            "cache_write_5m": { "$ref": "#/$defs/class_cost" },
-            "cache_write_1h": { "$ref": "#/$defs/class_cost" },
-            "cache_write_unspecified": { "$ref": "#/$defs/class_cost" },
-            "output": { "$ref": "#/$defs/class_cost" }
+            "uncached_input": {"$ref": "#/$defs/class_cost"},
+            "cache_read": {"$ref": "#/$defs/class_cost"},
+            "cache_write_5m": {"$ref": "#/$defs/class_cost"},
+            "cache_write_1h": {"$ref": "#/$defs/class_cost"},
+            "cache_write_unspecified": {"$ref": "#/$defs/class_cost"},
+            "output": {"$ref": "#/$defs/class_cost"}
           },
           "additionalProperties": false
         },
@@ -145,10 +148,10 @@
             "type": "object",
             "required": ["fee_id", "count", "unit_price_usd", "cost_usd"],
             "properties": {
-              "fee_id": { "$ref": "urn:purser:contracts:common:0.1.0#/$defs/id" },
-              "count": { "$ref": "urn:purser:contracts:common:0.1.0#/$defs/token_count" },
-              "unit_price_usd": { "$ref": "urn:purser:contracts:common:0.1.0#/$defs/decimal" },
-              "cost_usd": { "$ref": "urn:purser:contracts:common:0.1.0#/$defs/decimal" }
+              "fee_id": {"$ref": "urn:purser:contracts:common:0.1.0#/$defs/id"},
+              "count": {"$ref": "urn:purser:contracts:common:0.1.0#/$defs/token_count"},
+              "unit_price_usd": {"$ref": "urn:purser:contracts:common:0.1.0#/$defs/decimal"},
+              "cost_usd": {"$ref": "urn:purser:contracts:common:0.1.0#/$defs/decimal"}
             },
             "additionalProperties": false
           }
@@ -168,12 +171,23 @@
       "type": "object",
       "required": ["priced", "unpriced_dimensions"],
       "properties": {
-        "priced": { "const": false },
+        "priced": {"const": false},
         "unpriced_dimensions": {
           "type": "array",
           "minItems": 1,
           "uniqueItems": true,
-          "items": { "enum": ["model", "speed", "service_tier", "inference_geo", "long_context", "token_class", "fee", "cache_ttl"] }
+          "items": {
+            "enum": [
+              "model",
+              "speed",
+              "service_tier",
+              "inference_geo",
+              "long_context",
+              "token_class",
+              "fee",
+              "cache_ttl"
+            ]
+          }
         }
       },
       "additionalProperties": false

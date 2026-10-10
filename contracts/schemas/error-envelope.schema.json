@@ -3,6 +3,7 @@
   "$id": "urn:purser:contracts:error-envelope:0.1.0",
   "title": "Router denial response",
   "description": "A denial the router returns itself, before any upstream byte is sent, in the client's own protocol so harnesses parse it natively (B3, B4, C3, B5). The document is the HTTP response: status, the headers the router sets, and the JSON body. Anthropic Messages bodies use Anthropic's error shape, with the router's code in error.details.error_code, the slot Anthropic's own spend-limit error uses. OpenAI Chat Completions and Responses share one HTTP error shape, with the code in error.code. Each code has a fixed status, error type, and message template with no interpolation, so a body never echoes request content (C2); budget figures go in a closed purser object, and the attempt ID in the purser-attempt-id header. Mid-stream errors are passed through from the provider unmodified (H1) and are not described here.",
+  "$comment": "Cross-field rule, checked on examples by the validator: a budget denial's remaining_nanodollars is below its ceiling_nanodollars (7.6).",
   "type": "object",
   "required": ["protocol", "denial", "code", "status", "headers", "body"],
   "properties": {
@@ -20,31 +21,34 @@
       "enum": [400, 403, 429, 503]
     },
     "headers": {"$ref": "#/$defs/headers"},
-    "body": {"oneOf": [{"$ref": "#/$defs/anthropic_body"}, {"$ref": "#/$defs/openai_body"}]}
+    "body": {
+      "description": "Anthropic shape when it has a top-level type key, OpenAI shape otherwise; the protocol rule below says which one the client needs.",
+      "type": "object",
+      "if": {"required": ["type"]},
+      "then": {"$ref": "#/$defs/anthropic_body"},
+      "else": {"$ref": "#/$defs/openai_body"},
+      "unevaluatedProperties": false
+    }
   },
   "additionalProperties": false,
   "allOf": [
     {
-      "$comment": "The body shape follows the protocol.",
-      "if": {"properties": {"protocol": {"const": "anthropic_messages"}}},
-      "then": {"properties": {"body": {"$ref": "#/$defs/anthropic_body"}}},
-      "else": {"properties": {"body": {"$ref": "#/$defs/openai_body"}}}
+      "$comment": "The body is in the client's protocol (B4): Anthropic bodies carry a top-level type key, OpenAI bodies do not.",
+      "if": {"properties": {"protocol": {"const": "anthropic_messages"}}, "required": ["protocol"]},
+      "then": {"properties": {"body": {"required": ["type"]}}},
+      "else": {"properties": {"body": {"not": {"required": ["type"]}}}}
     },
-    {
-      "$comment": "Exactly one code's rules apply: its denial, status, headers, error type, message, and detail object.",
-      "oneOf": [
-        {"$ref": "#/$defs/code_purser_budget_exceeded"},
-        {"$ref": "#/$defs/code_purser_policy_denied"},
-        {"$ref": "#/$defs/code_purser_unbounded_unpriced_model"},
-        {"$ref": "#/$defs/code_purser_unbounded_unpriced_dimension"},
-        {"$ref": "#/$defs/code_purser_unbounded_missing_output_cap"},
-        {"$ref": "#/$defs/code_purser_unbounded_uncapped_server_tool"},
-        {"$ref": "#/$defs/code_purser_unbounded_unpriced_cache_ttl"},
-        {"$ref": "#/$defs/code_purser_unbounded_input"},
-        {"$ref": "#/$defs/code_purser_upstream_unavailable"},
-        {"$ref": "#/$defs/code_purser_ledger_unavailable"}
-      ]
-    }
+    {"$ref": "#/$defs/code_purser_budget_exceeded"},
+    {"$ref": "#/$defs/code_purser_policy_denied"},
+    {"$ref": "#/$defs/code_purser_unbounded_unpriced_model"},
+    {"$ref": "#/$defs/code_purser_unbounded_unpriced_dimension"},
+    {"$ref": "#/$defs/code_purser_unbounded_missing_output_cap"},
+    {"$ref": "#/$defs/code_purser_unbounded_uncapped_server_tool"},
+    {"$ref": "#/$defs/code_purser_unbounded_unpriced_server_tool"},
+    {"$ref": "#/$defs/code_purser_unbounded_unpriced_cache_ttl"},
+    {"$ref": "#/$defs/code_purser_unbounded_input"},
+    {"$ref": "#/$defs/code_purser_upstream_unavailable"},
+    {"$ref": "#/$defs/code_purser_ledger_unavailable"}
   ],
   "$defs": {
     "code": {
@@ -56,6 +60,7 @@
         "purser_unbounded_unpriced_dimension",
         "purser_unbounded_missing_output_cap",
         "purser_unbounded_uncapped_server_tool",
+        "purser_unbounded_unpriced_server_tool",
         "purser_unbounded_unpriced_cache_ttl",
         "purser_unbounded_input",
         "purser_upstream_unavailable",
@@ -68,9 +73,10 @@
         "Purser budget exceeded for this window. retry-after gives the seconds until the window resets.",
         "Purser destination policy does not allow this request to reach this provider or model.",
         "Purser cannot bound the cost of this request: the model has no price-book entry.",
-        "Purser cannot bound the cost of this request: its speed, service tier, or geography has no price-book rule.",
+        "Purser cannot bound the cost of this request: its speed, service tier, geography, long-context tier, or a token class it can incur has no price-book rule.",
         "Purser cannot bound the cost of this request: set an output token cap (max_tokens, max_completion_tokens, or max_output_tokens).",
         "Purser cannot bound the cost of this request: a server tool with a per-use fee needs a max_uses limit.",
+        "Purser cannot bound the cost of this request: a server tool it may use has no price-book fee rule.",
         "Purser cannot bound the cost of this request: a requested cache TTL has no price-book rule.",
         "Purser cannot bound the cost of this request: no upper bound on its input tokens is available.",
         "Purser could not reach the upstream provider for this request. Retry later.",
@@ -78,7 +84,7 @@
       ]
     },
     "headers": {
-      "description": "Headers the router sets on a denial. retry-after is integer seconds until the denying window resets (B4); required on 429, allowed on 503, absent on 400 and 403.",
+      "description": "Headers the router sets on a denial. retry-after is integer seconds, rounded up and at least 1, until the denying window resets (B4); required on 429, allowed on 503, absent on 400 and 403.",
       "type": "object",
       "required": ["content-type", "purser-attempt-id"],
       "properties": {
@@ -92,7 +98,7 @@
       "additionalProperties": false
     },
     "budget_detail": {
-      "description": "Which budget denied the request and by how much (7.4, 7.8). remaining_nanodollars is limit minus spent minus reserved, which can be negative after an overrun (7.6).",
+      "description": "Which budget denied the request and by how much (7.4, 7.8). When several windows deny, this and retry-after describe the one that resets last. Windows are UTC calendar days or months (7.1), so a reset is at midnight, on the 1st for a month. remaining_nanodollars is limit minus spent minus reserved, below ceiling_nanodollars for a denial, and negative after an overrun (7.6).",
       "type": "object",
       "required": ["scope", "window", "window_resets_at", "ceiling_nanodollars", "remaining_nanodollars"],
       "properties": {
@@ -102,7 +108,21 @@
         "ceiling_nanodollars": {"$ref": "urn:purser:contracts:common:0.1.0#/$defs/nanodollars"},
         "remaining_nanodollars": {"$ref": "urn:purser:contracts:common:0.1.0#/$defs/signed_nanodollars"}
       },
-      "additionalProperties": false
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "if": {"properties": {"window": {"const": "day"}}, "required": ["window"]},
+          "then": {
+            "properties": {
+              "window_resets_at": {"pattern": "^[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])T00:00:00Z$"}
+            }
+          }
+        },
+        {
+          "if": {"properties": {"window": {"const": "month"}}, "required": ["window"]},
+          "then": {"properties": {"window_resets_at": {"pattern": "^[0-9]{4}-(0[1-9]|1[0-2])-01T00:00:00Z$"}}}
+        }
+      ]
     },
     "anthropic_body": {
       "description": "Anthropic Messages error body: {type: error, error: {type, message, details}}.",
@@ -154,15 +174,18 @@
       "additionalProperties": false
     },
     "code_purser_budget_exceeded": {
-      "properties": {
-        "denial": {"const": "budget_exceeded"},
-        "code": {"const": "purser_budget_exceeded"},
-        "status": {"const": 429},
-        "headers": {"required": ["retry-after"]},
-        "body": {
-          "oneOf": [
-            {
-              "required": ["type"],
+      "if": {"properties": {"code": {"const": "purser_budget_exceeded"}}, "required": ["code"]},
+      "then": {
+        "properties": {
+          "denial": {"const": "budget_exceeded"},
+          "status": {"const": 429},
+          "headers": {
+            "required": ["retry-after"],
+            "properties": {"retry-after": {"pattern": "^[1-9][0-9]{0,6}$"}}
+          },
+          "body": {
+            "if": {"required": ["type"]},
+            "then": {
               "properties": {
                 "error": {
                   "properties": {
@@ -178,8 +201,7 @@
                 }
               }
             },
-            {
-              "not": {"required": ["type"]},
+            "else": {
               "properties": {
                 "error": {
                   "properties": {
@@ -193,21 +215,20 @@
               },
               "required": ["purser"]
             }
-          ]
+          }
         }
-      },
-      "required": ["code"]
+      }
     },
     "code_purser_policy_denied": {
-      "properties": {
-        "denial": {"const": "policy_denied"},
-        "code": {"const": "purser_policy_denied"},
-        "status": {"const": 403},
-        "headers": {"not": {"required": ["retry-after"]}},
-        "body": {
-          "oneOf": [
-            {
-              "required": ["type"],
+      "if": {"properties": {"code": {"const": "purser_policy_denied"}}, "required": ["code"]},
+      "then": {
+        "properties": {
+          "denial": {"const": "policy_denied"},
+          "status": {"const": 403},
+          "headers": {"not": {"required": ["retry-after"]}},
+          "body": {
+            "if": {"required": ["type"]},
+            "then": {
               "properties": {
                 "error": {
                   "properties": {
@@ -223,8 +244,7 @@
                 }
               }
             },
-            {
-              "not": {"required": ["purser"]},
+            "else": {
               "properties": {
                 "error": {
                   "properties": {
@@ -235,23 +255,23 @@
                     "code": {"const": "purser_policy_denied"}
                   }
                 }
-              }
+              },
+              "not": {"required": ["purser"]}
             }
-          ]
+          }
         }
-      },
-      "required": ["code"]
+      }
     },
     "code_purser_unbounded_unpriced_model": {
-      "properties": {
-        "denial": {"const": "request_unbounded"},
-        "code": {"const": "purser_unbounded_unpriced_model"},
-        "status": {"const": 400},
-        "headers": {"not": {"required": ["retry-after"]}},
-        "body": {
-          "oneOf": [
-            {
-              "required": ["type"],
+      "if": {"properties": {"code": {"const": "purser_unbounded_unpriced_model"}}, "required": ["code"]},
+      "then": {
+        "properties": {
+          "denial": {"const": "request_unbounded"},
+          "status": {"const": 400},
+          "headers": {"not": {"required": ["retry-after"]}},
+          "body": {
+            "if": {"required": ["type"]},
+            "then": {
               "properties": {
                 "error": {
                   "properties": {
@@ -267,8 +287,7 @@
                 }
               }
             },
-            {
-              "not": {"required": ["purser"]},
+            "else": {
               "properties": {
                 "error": {
                   "properties": {
@@ -279,29 +298,29 @@
                     "code": {"const": "purser_unbounded_unpriced_model"}
                   }
                 }
-              }
+              },
+              "not": {"required": ["purser"]}
             }
-          ]
+          }
         }
-      },
-      "required": ["code"]
+      }
     },
     "code_purser_unbounded_unpriced_dimension": {
-      "properties": {
-        "denial": {"const": "request_unbounded"},
-        "code": {"const": "purser_unbounded_unpriced_dimension"},
-        "status": {"const": 400},
-        "headers": {"not": {"required": ["retry-after"]}},
-        "body": {
-          "oneOf": [
-            {
-              "required": ["type"],
+      "if": {"properties": {"code": {"const": "purser_unbounded_unpriced_dimension"}}, "required": ["code"]},
+      "then": {
+        "properties": {
+          "denial": {"const": "request_unbounded"},
+          "status": {"const": 400},
+          "headers": {"not": {"required": ["retry-after"]}},
+          "body": {
+            "if": {"required": ["type"]},
+            "then": {
               "properties": {
                 "error": {
                   "properties": {
                     "type": {"const": "invalid_request_error"},
                     "message": {
-                      "const": "Purser cannot bound the cost of this request: its speed, service tier, or geography has no price-book rule."
+                      "const": "Purser cannot bound the cost of this request: its speed, service tier, geography, long-context tier, or a token class it can incur has no price-book rule."
                     },
                     "details": {
                       "properties": {"error_code": {"const": "purser_unbounded_unpriced_dimension"}},
@@ -311,35 +330,34 @@
                 }
               }
             },
-            {
-              "not": {"required": ["purser"]},
+            "else": {
               "properties": {
                 "error": {
                   "properties": {
                     "type": {"const": "invalid_request_error"},
                     "message": {
-                      "const": "Purser cannot bound the cost of this request: its speed, service tier, or geography has no price-book rule."
+                      "const": "Purser cannot bound the cost of this request: its speed, service tier, geography, long-context tier, or a token class it can incur has no price-book rule."
                     },
                     "code": {"const": "purser_unbounded_unpriced_dimension"}
                   }
                 }
-              }
+              },
+              "not": {"required": ["purser"]}
             }
-          ]
+          }
         }
-      },
-      "required": ["code"]
+      }
     },
     "code_purser_unbounded_missing_output_cap": {
-      "properties": {
-        "denial": {"const": "request_unbounded"},
-        "code": {"const": "purser_unbounded_missing_output_cap"},
-        "status": {"const": 400},
-        "headers": {"not": {"required": ["retry-after"]}},
-        "body": {
-          "oneOf": [
-            {
-              "required": ["type"],
+      "if": {"properties": {"code": {"const": "purser_unbounded_missing_output_cap"}}, "required": ["code"]},
+      "then": {
+        "properties": {
+          "denial": {"const": "request_unbounded"},
+          "status": {"const": 400},
+          "headers": {"not": {"required": ["retry-after"]}},
+          "body": {
+            "if": {"required": ["type"]},
+            "then": {
               "properties": {
                 "error": {
                   "properties": {
@@ -355,8 +373,7 @@
                 }
               }
             },
-            {
-              "not": {"required": ["purser"]},
+            "else": {
               "properties": {
                 "error": {
                   "properties": {
@@ -367,23 +384,23 @@
                     "code": {"const": "purser_unbounded_missing_output_cap"}
                   }
                 }
-              }
+              },
+              "not": {"required": ["purser"]}
             }
-          ]
+          }
         }
-      },
-      "required": ["code"]
+      }
     },
     "code_purser_unbounded_uncapped_server_tool": {
-      "properties": {
-        "denial": {"const": "request_unbounded"},
-        "code": {"const": "purser_unbounded_uncapped_server_tool"},
-        "status": {"const": 400},
-        "headers": {"not": {"required": ["retry-after"]}},
-        "body": {
-          "oneOf": [
-            {
-              "required": ["type"],
+      "if": {"properties": {"code": {"const": "purser_unbounded_uncapped_server_tool"}}, "required": ["code"]},
+      "then": {
+        "properties": {
+          "denial": {"const": "request_unbounded"},
+          "status": {"const": 400},
+          "headers": {"not": {"required": ["retry-after"]}},
+          "body": {
+            "if": {"required": ["type"]},
+            "then": {
               "properties": {
                 "error": {
                   "properties": {
@@ -399,8 +416,7 @@
                 }
               }
             },
-            {
-              "not": {"required": ["purser"]},
+            "else": {
               "properties": {
                 "error": {
                   "properties": {
@@ -411,23 +427,66 @@
                     "code": {"const": "purser_unbounded_uncapped_server_tool"}
                   }
                 }
-              }
+              },
+              "not": {"required": ["purser"]}
             }
-          ]
+          }
         }
-      },
-      "required": ["code"]
+      }
+    },
+    "code_purser_unbounded_unpriced_server_tool": {
+      "if": {"properties": {"code": {"const": "purser_unbounded_unpriced_server_tool"}}, "required": ["code"]},
+      "then": {
+        "properties": {
+          "denial": {"const": "request_unbounded"},
+          "status": {"const": 400},
+          "headers": {"not": {"required": ["retry-after"]}},
+          "body": {
+            "if": {"required": ["type"]},
+            "then": {
+              "properties": {
+                "error": {
+                  "properties": {
+                    "type": {"const": "invalid_request_error"},
+                    "message": {
+                      "const": "Purser cannot bound the cost of this request: a server tool it may use has no price-book fee rule."
+                    },
+                    "details": {
+                      "properties": {"error_code": {"const": "purser_unbounded_unpriced_server_tool"}},
+                      "not": {"required": ["purser"]}
+                    }
+                  }
+                }
+              }
+            },
+            "else": {
+              "properties": {
+                "error": {
+                  "properties": {
+                    "type": {"const": "invalid_request_error"},
+                    "message": {
+                      "const": "Purser cannot bound the cost of this request: a server tool it may use has no price-book fee rule."
+                    },
+                    "code": {"const": "purser_unbounded_unpriced_server_tool"}
+                  }
+                }
+              },
+              "not": {"required": ["purser"]}
+            }
+          }
+        }
+      }
     },
     "code_purser_unbounded_unpriced_cache_ttl": {
-      "properties": {
-        "denial": {"const": "request_unbounded"},
-        "code": {"const": "purser_unbounded_unpriced_cache_ttl"},
-        "status": {"const": 400},
-        "headers": {"not": {"required": ["retry-after"]}},
-        "body": {
-          "oneOf": [
-            {
-              "required": ["type"],
+      "if": {"properties": {"code": {"const": "purser_unbounded_unpriced_cache_ttl"}}, "required": ["code"]},
+      "then": {
+        "properties": {
+          "denial": {"const": "request_unbounded"},
+          "status": {"const": 400},
+          "headers": {"not": {"required": ["retry-after"]}},
+          "body": {
+            "if": {"required": ["type"]},
+            "then": {
               "properties": {
                 "error": {
                   "properties": {
@@ -443,8 +502,7 @@
                 }
               }
             },
-            {
-              "not": {"required": ["purser"]},
+            "else": {
               "properties": {
                 "error": {
                   "properties": {
@@ -455,23 +513,23 @@
                     "code": {"const": "purser_unbounded_unpriced_cache_ttl"}
                   }
                 }
-              }
+              },
+              "not": {"required": ["purser"]}
             }
-          ]
+          }
         }
-      },
-      "required": ["code"]
+      }
     },
     "code_purser_unbounded_input": {
-      "properties": {
-        "denial": {"const": "request_unbounded"},
-        "code": {"const": "purser_unbounded_input"},
-        "status": {"const": 400},
-        "headers": {"not": {"required": ["retry-after"]}},
-        "body": {
-          "oneOf": [
-            {
-              "required": ["type"],
+      "if": {"properties": {"code": {"const": "purser_unbounded_input"}}, "required": ["code"]},
+      "then": {
+        "properties": {
+          "denial": {"const": "request_unbounded"},
+          "status": {"const": 400},
+          "headers": {"not": {"required": ["retry-after"]}},
+          "body": {
+            "if": {"required": ["type"]},
+            "then": {
               "properties": {
                 "error": {
                   "properties": {
@@ -487,8 +545,7 @@
                 }
               }
             },
-            {
-              "not": {"required": ["purser"]},
+            "else": {
               "properties": {
                 "error": {
                   "properties": {
@@ -499,22 +556,22 @@
                     "code": {"const": "purser_unbounded_input"}
                   }
                 }
-              }
+              },
+              "not": {"required": ["purser"]}
             }
-          ]
+          }
         }
-      },
-      "required": ["code"]
+      }
     },
     "code_purser_upstream_unavailable": {
-      "properties": {
-        "denial": {"const": "upstream_unavailable"},
-        "code": {"const": "purser_upstream_unavailable"},
-        "status": {"const": 503},
-        "body": {
-          "oneOf": [
-            {
-              "required": ["type"],
+      "if": {"properties": {"code": {"const": "purser_upstream_unavailable"}}, "required": ["code"]},
+      "then": {
+        "properties": {
+          "denial": {"const": "upstream_unavailable"},
+          "status": {"const": 503},
+          "body": {
+            "if": {"required": ["type"]},
+            "then": {
               "properties": {
                 "error": {
                   "properties": {
@@ -530,8 +587,7 @@
                 }
               }
             },
-            {
-              "not": {"required": ["purser"]},
+            "else": {
               "properties": {
                 "error": {
                   "properties": {
@@ -542,22 +598,22 @@
                     "code": {"const": "purser_upstream_unavailable"}
                   }
                 }
-              }
+              },
+              "not": {"required": ["purser"]}
             }
-          ]
+          }
         }
-      },
-      "required": ["code"]
+      }
     },
     "code_purser_ledger_unavailable": {
-      "properties": {
-        "denial": {"const": "upstream_unavailable"},
-        "code": {"const": "purser_ledger_unavailable"},
-        "status": {"const": 503},
-        "body": {
-          "oneOf": [
-            {
-              "required": ["type"],
+      "if": {"properties": {"code": {"const": "purser_ledger_unavailable"}}, "required": ["code"]},
+      "then": {
+        "properties": {
+          "denial": {"const": "upstream_unavailable"},
+          "status": {"const": 503},
+          "body": {
+            "if": {"required": ["type"]},
+            "then": {
               "properties": {
                 "error": {
                   "properties": {
@@ -573,8 +629,7 @@
                 }
               }
             },
-            {
-              "not": {"required": ["purser"]},
+            "else": {
               "properties": {
                 "error": {
                   "properties": {
@@ -585,12 +640,12 @@
                     "code": {"const": "purser_ledger_unavailable"}
                   }
                 }
-              }
+              },
+              "not": {"required": ["purser"]}
             }
-          ]
+          }
         }
-      },
-      "required": ["code"]
+      }
     }
   }
 }

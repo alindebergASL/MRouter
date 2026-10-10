@@ -12,6 +12,8 @@ pinned dependencies in contracts/tools/requirements.txt. Checks, in order:
 3. Every example directory has valid and invalid examples. Valid ones pass. Each
    invalid one fails, and every error it raises is the one named for it in
    invalid/expectations.json, so an example can't fail for an accidental reason.
+   Cross-field rules a schema cannot express (listed in its root $comment) are
+   checked too; an invalid example targets one with keyword "semantic:<rule>".
 4. No JSON under contracts/ holds a float, NaN, Infinity, or a duplicate key, so
    money can never be a float (architecture 6.4).
 5. No-free-text lint (C2, C4): in the event and denial-body schemas every string
@@ -359,6 +361,8 @@ def check_examples(
                 continue
             for error in validator.iter_errors(instance):
                 failures.add(rel(path), f"valid example fails: {describe(error)}")
+            for rule, message in semantic_problems(directory.name, instance):
+                failures.add(rel(path), f"valid example breaks {rule}: {message}")
         if not invalid:
             continue
         try:
@@ -390,6 +394,13 @@ def check_examples(
                 failures.add(rel(path), f"expected {keyword}, but it loaded")
                 continue
             errors = list(validator.iter_errors(instance))
+            if keyword.startswith("semantic:"):
+                for error in errors:
+                    failures.add(rel(path), f"must pass the schema to test {keyword}: {describe(error)}")
+                broken = {rule for rule, _ in semantic_problems(directory.name, instance)}
+                if broken != {keyword.removeprefix("semantic:")}:
+                    failures.add(rel(path), f"expected only {keyword} to fail; cross-field rules broken: {sorted(broken) or 'none'}")
+                continue
             if not errors:
                 failures.add(rel(path), "invalid example passes validation")
             for error in errors:
@@ -404,6 +415,116 @@ def check_examples(
         if not (EXAMPLES / name).is_dir():
             failures.add(rel(EXAMPLES), f"no examples for the root of schema {name}")
     return count, parse_failures
+
+
+# --- 3b. Cross-field rules JSON Schema cannot express --------------------------------------
+# Each schema's root $comment lists the rules that apply to it. Valid examples and pricing
+# fixtures must satisfy them; an invalid example can target one with keyword "semantic:<rule>".
+
+
+def instant(text: str) -> tuple[str, int]:
+    """Order RFC 3339 UTC timestamps (the common rfc3339_utc format) to the nanosecond."""
+    whole, _, frac = text.rstrip("Z").partition(".")
+    return whole, int((frac or "0").ljust(9, "0"))
+
+
+def _attempt_rules(doc: dict[str, Any]) -> Iterator[tuple[str, str]]:
+    settlement = doc.get("settlement") or {}
+    ceiling, cost = doc.get("ceiling_nanodollars"), settlement.get("cost_nanodollars")
+    if settlement.get("basis") == "ceiling_charge" and cost != ceiling:
+        yield "ceiling_charge_equals_ceiling", f"a ceiling charge of {cost} nd is not the ceiling {ceiling} nd (7.5)"
+    if settlement and ceiling is not None and cost is not None and settlement.get("overrun") != (cost > ceiling):
+        yield "overrun_matches_cost", f"overrun is {settlement.get('overrun')} for cost {cost} nd and ceiling {ceiling} nd (7.6)"
+    if doc.get("retry_of_attempt_id") == doc.get("attempt_id"):
+        yield "retry_not_self", "an attempt cannot retry itself"
+    times = [doc.get("reserved_at")] + [t.get("at") for t in doc.get("transitions", [])]
+    if any(b < a for a, b in zip(map(instant, times), map(instant, times[1:]))):
+        yield "times_ordered", "transition times go backwards or precede reserved_at"
+
+
+def _usage_event_rules(doc: dict[str, Any]) -> Iterator[tuple[str, str]]:
+    dispatched = instant(doc["dispatched_at"])
+    for key in ("settled_at", "recorded_at"):
+        if doc.get(key) and instant(doc[key]) < dispatched:
+            yield "times_ordered", f"{key} is before dispatched_at"
+    timing = doc.get("timing", {})
+    ttfb, duration = timing.get("ttfb_ms", {}).get("value"), timing.get("duration_ms", {}).get("value")
+    if ttfb is not None and duration is not None and ttfb > duration:
+        yield "ttfb_within_duration", f"ttfb_ms {ttfb} exceeds duration_ms {duration}"
+    if doc.get("correlation", {}).get("retry_of_attempt_id") == doc.get("attempt_id"):
+        yield "retry_not_self", "an attempt cannot retry itself"
+    fee_ids = [f.get("fee_id") for f in doc.get("fees", [])]
+    if len(fee_ids) != len(set(fee_ids)):
+        yield "fee_ids_distinct", "fees lists a fee_id more than once"
+
+
+def _error_envelope_rules(doc: dict[str, Any]) -> Iterator[tuple[str, str]]:
+    body = doc.get("body", {})
+    detail = body.get("purser") or body.get("error", {}).get("details", {}).get("purser")
+    if detail and detail["remaining_nanodollars"] >= detail["ceiling_nanodollars"]:
+        yield "budget_remaining_below_ceiling", "a budget denial needs remaining below the ceiling (7.6)"
+
+
+def _window_ok(start: str | None, end: str | None) -> bool:
+    return start is None or end is None or instant(start) < instant(end)
+
+
+def _price_book_rules(doc: dict[str, Any]) -> Iterator[tuple[str, str]]:
+    spans: dict[tuple[str, str], list[tuple[str, str | None]]] = {}
+    for entry in doc.get("entries", []):
+        name = entry.get("entry_id")
+        if not _window_ok(entry.get("effective_from"), entry.get("effective_until")):
+            yield "windows_ordered", f"{name}: effective_until is not after effective_from"
+        spans.setdefault((entry.get("provider"), entry.get("model")), []).append(
+            (entry.get("effective_from"), entry.get("effective_until"))
+        )
+        fee_ids, promotions = [], []
+        for rule in entry.get("rules", []):
+            kind = rule.get("type")
+            if kind in ("speed_or_service_tier", "geography"):
+                values = [v.get("value") for v in rule.get("values", [])]
+                if len(values) != len(set(values)):
+                    yield "dimension_values_distinct", f"{name}: {rule.get('dimension')} lists a value twice"
+                if rule.get("default_value") is not None and rule["default_value"] not in values:
+                    yield "default_in_values", f"{name}: {rule.get('dimension')} default {rule['default_value']} is not priced"
+            elif kind == "per_use_fee":
+                fee_ids.append(rule.get("fee_id"))
+            elif kind == "promotion":
+                if not _window_ok(rule.get("starts_at"), rule.get("ends_at")):
+                    yield "windows_ordered", f"{name}: a promotion ends before it starts"
+                promotions.append((rule.get("starts_at"), rule.get("ends_at")))
+            elif kind == "negotiated" and not _window_ok(rule.get("effective_from"), rule.get("effective_until")):
+                yield "windows_ordered", f"{name}: a negotiated rate ends before it starts"
+        if len(fee_ids) != len(set(fee_ids)):
+            yield "fee_ids_distinct", f"{name}: a fee_id appears twice"
+        if _overlapping(promotions):
+            yield "promotions_no_overlap", f"{name}: promotion windows overlap"
+    for (provider, model), windows in spans.items():
+        if _overlapping(windows):
+            yield "entries_no_overlap", f"entries for {provider} {model} overlap in time"
+
+
+def _overlapping(windows: list[tuple[str, str | None]]) -> bool:
+    ordered = sorted((instant(s), instant(e) if e else None) for s, e in windows if s)
+    return any(end is None or end > nxt for (_, end), (nxt, _) in zip(ordered, ordered[1:]))
+
+
+SEMANTIC_RULES = {
+    "attempt": _attempt_rules,
+    "usage-event": _usage_event_rules,
+    "error-envelope": _error_envelope_rules,
+    "price-book": _price_book_rules,
+}
+
+
+def semantic_problems(target: str, doc: Any) -> list[tuple[str, str]]:
+    rules = SEMANTIC_RULES.get(target)
+    if rules is None or not isinstance(doc, dict):
+        return []
+    try:
+        return list(rules(doc))
+    except (KeyError, TypeError, AttributeError, ValueError) as exc:
+        return [("malformed", f"cannot apply cross-field rules: {exc!r}")]
 
 
 # --- 4. No floats anywhere ----------------------------------------------------------
@@ -588,6 +709,8 @@ def check_pricing_fixtures(
             continue
         for error in validator.iter_errors(doc):
             failures.add(rel(path), f"does not match {kind}: {describe(error)}")
+        for rule, message in semantic_problems(kind, doc):
+            failures.add(rel(path), f"breaks {rule}: {message}")
         if kind == "price-book":
             books[path.name] = doc
         else:

@@ -22,12 +22,12 @@
     "provider_message_id_hmac"
   ],
   "properties": {
-    "schema_version": { "$ref": "urn:purser:contracts:common:0.1.0#/$defs/schema_version" },
-    "event_id": { "$ref": "urn:purser:contracts:common:0.1.0#/$defs/uuid" },
-    "org_id": { "$ref": "urn:purser:contracts:common:0.1.0#/$defs/id" },
-    "user_id": { "$ref": "urn:purser:contracts:common:0.1.0#/$defs/id" },
-    "device_id": { "$ref": "urn:purser:contracts:common:0.1.0#/$defs/id" },
-    "harness": { "$ref": "urn:purser:contracts:common:0.1.0#/$defs/harness" },
+    "schema_version": {"$ref": "urn:purser:contracts:common:0.1.0#/$defs/schema_version"},
+    "event_id": {"$ref": "urn:purser:contracts:common:0.1.0#/$defs/uuid"},
+    "org_id": {"$ref": "urn:purser:contracts:common:0.1.0#/$defs/id"},
+    "user_id": {"$ref": "urn:purser:contracts:common:0.1.0#/$defs/id"},
+    "device_id": {"$ref": "urn:purser:contracts:common:0.1.0#/$defs/id"},
+    "harness": {"$ref": "urn:purser:contracts:common:0.1.0#/$defs/harness"},
     "harness_version": {
       "description": "The harness version that wrote the transcript, when the transcript records it. Readers are certified per harness version (improvement 5).",
       "$ref": "#/$defs/trace_semver"
@@ -36,8 +36,8 @@
       "type": "object",
       "required": ["id", "version"],
       "properties": {
-        "id": { "$ref": "urn:purser:contracts:common:0.1.0#/$defs/id" },
-        "version": { "$ref": "urn:purser:contracts:common:0.1.0#/$defs/semver" }
+        "id": {"$ref": "urn:purser:contracts:common:0.1.0#/$defs/id"},
+        "version": {"$ref": "urn:purser:contracts:common:0.1.0#/$defs/semver"}
       },
       "additionalProperties": false
     },
@@ -45,8 +45,8 @@
       "description": "The transcript format the reader identified, such as claude-code.jsonl.v3; unrecognized when it did not recognize it.",
       "$ref": "urn:purser:contracts:common:0.1.0#/$defs/id"
     },
-    "session_id": { "$ref": "#/$defs/trace_id" },
-    "model": { "$ref": "#/$defs/trace_model_id" },
+    "session_id": {"$ref": "#/$defs/trace_id"},
+    "model": {"$ref": "#/$defs/trace_model_id"},
     "occurred_at": {
       "description": "When the model call happened, per the transcript.",
       "$ref": "#/$defs/trace_timestamp"
@@ -69,38 +69,43 @@
         "cache_write_total"
       ],
       "properties": {
-        "uncached_input": { "$ref": "#/$defs/trace_count" },
-        "cache_read": { "$ref": "#/$defs/trace_count" },
-        "cache_write_5m": { "$ref": "#/$defs/trace_count" },
-        "cache_write_1h": { "$ref": "#/$defs/trace_count" },
-        "cache_write_unspecified": { "$ref": "#/$defs/trace_count" },
-        "output": { "$ref": "#/$defs/trace_count" },
-        "reasoning": { "$ref": "#/$defs/trace_count" },
-        "cache_write_total": { "$ref": "#/$defs/trace_count" }
+        "uncached_input": {"$ref": "#/$defs/trace_count"},
+        "cache_read": {"$ref": "#/$defs/trace_count"},
+        "cache_write_5m": {"$ref": "#/$defs/trace_count"},
+        "cache_write_1h": {"$ref": "#/$defs/trace_count"},
+        "cache_write_unspecified": {"$ref": "#/$defs/trace_count"},
+        "output": {"$ref": "#/$defs/trace_count"},
+        "reasoning": {"$ref": "#/$defs/trace_count"},
+        "cache_write_total": {"$ref": "#/$defs/trace_count"}
       },
       "additionalProperties": false
     },
-    "provider_message_id_hmac": { "$ref": "#/$defs/trace_hmac" }
+    "provider_message_id_hmac": {"$ref": "#/$defs/trace_hmac"}
   },
   "additionalProperties": false,
   "allOf": [
     {
-      "$comment": "An unrecognized format yields no values: every token count is unavailable for that reason (improvement 5).",
-      "if": { "properties": { "trace_format": { "const": "unrecognized" } } },
+      "$comment": "An unrecognized format yields no values: the counts, model, session, time, harness version, and message hash are all unavailable for that reason (6.6, improvement 5).",
+      "if": {"properties": {"trace_format": {"const": "unrecognized"}}, "required": ["trace_format"]},
       "then": {
         "properties": {
           "tokens": {
             "properties": {
-              "uncached_input": { "$ref": "#/$defs/unrecognized" },
-              "cache_read": { "$ref": "#/$defs/unrecognized" },
-              "cache_write_5m": { "$ref": "#/$defs/unrecognized" },
-              "cache_write_1h": { "$ref": "#/$defs/unrecognized" },
-              "cache_write_unspecified": { "$ref": "#/$defs/unrecognized" },
-              "output": { "$ref": "#/$defs/unrecognized" },
-              "reasoning": { "$ref": "#/$defs/unrecognized" },
-              "cache_write_total": { "$ref": "#/$defs/unrecognized" }
+              "uncached_input": {"$ref": "#/$defs/unrecognized"},
+              "cache_read": {"$ref": "#/$defs/unrecognized"},
+              "cache_write_5m": {"$ref": "#/$defs/unrecognized"},
+              "cache_write_1h": {"$ref": "#/$defs/unrecognized"},
+              "cache_write_unspecified": {"$ref": "#/$defs/unrecognized"},
+              "output": {"$ref": "#/$defs/unrecognized"},
+              "reasoning": {"$ref": "#/$defs/unrecognized"},
+              "cache_write_total": {"$ref": "#/$defs/unrecognized"}
             }
-          }
+          },
+          "model": {"$ref": "#/$defs/unrecognized"},
+          "session_id": {"$ref": "#/$defs/unrecognized"},
+          "occurred_at": {"$ref": "#/$defs/unrecognized"},
+          "harness_version": {"$ref": "#/$defs/unrecognized"},
+          "provider_message_id_hmac": {"$ref": "#/$defs/unrecognized"}
         }
       }
     }
@@ -111,36 +116,34 @@
       "enum": ["measured", "inferred", "estimated", "unavailable"]
     },
     "unrecognized": {
-      "properties": {
-        "evidence": { "const": "unavailable" },
-        "unavailable_reason": { "const": "unrecognized_format" }
-      },
+      "$comment": "Unavailable because the format was not recognized. With common evidence_rules, the reason implies a null value.",
+      "properties": {"unavailable_reason": {"const": "unrecognized_format"}},
       "required": ["unavailable_reason"]
     },
     "trace_count": {
-      "allOf": [{ "$ref": "urn:purser:contracts:common:0.1.0#/$defs/evidenced_count" }],
-      "properties": { "evidence": { "$ref": "#/$defs/trace_evidence" } }
+      "allOf": [{"$ref": "urn:purser:contracts:common:0.1.0#/$defs/evidenced_count"}],
+      "properties": {"evidence": {"$ref": "#/$defs/trace_evidence"}}
     },
     "trace_id": {
-      "allOf": [{ "$ref": "urn:purser:contracts:common:0.1.0#/$defs/evidenced_id" }],
-      "properties": { "evidence": { "$ref": "#/$defs/trace_evidence" } }
+      "allOf": [{"$ref": "urn:purser:contracts:common:0.1.0#/$defs/evidenced_id"}],
+      "properties": {"evidence": {"$ref": "#/$defs/trace_evidence"}}
     },
     "trace_model_id": {
-      "allOf": [{ "$ref": "urn:purser:contracts:common:0.1.0#/$defs/evidenced_model_id" }],
-      "properties": { "evidence": { "$ref": "#/$defs/trace_evidence" } }
+      "allOf": [{"$ref": "urn:purser:contracts:common:0.1.0#/$defs/evidenced_model_id"}],
+      "properties": {"evidence": {"$ref": "#/$defs/trace_evidence"}}
     },
     "trace_semver": {
-      "allOf": [{ "$ref": "urn:purser:contracts:common:0.1.0#/$defs/evidenced_semver" }],
-      "properties": { "evidence": { "$ref": "#/$defs/trace_evidence" } }
+      "allOf": [{"$ref": "urn:purser:contracts:common:0.1.0#/$defs/evidenced_semver"}],
+      "properties": {"evidence": {"$ref": "#/$defs/trace_evidence"}}
     },
     "trace_timestamp": {
-      "allOf": [{ "$ref": "urn:purser:contracts:common:0.1.0#/$defs/evidenced_timestamp" }],
-      "properties": { "evidence": { "$ref": "#/$defs/trace_evidence" } }
+      "allOf": [{"$ref": "urn:purser:contracts:common:0.1.0#/$defs/evidenced_timestamp"}],
+      "properties": {"evidence": {"$ref": "#/$defs/trace_evidence"}}
     },
     "trace_hmac": {
       "description": "Unavailable when the transcript records no provider message or response ID; such an event can never be matched to a relay record.",
-      "allOf": [{ "$ref": "urn:purser:contracts:common:0.1.0#/$defs/evidenced_hmac" }],
-      "properties": { "evidence": { "$ref": "#/$defs/trace_evidence" } }
+      "allOf": [{"$ref": "urn:purser:contracts:common:0.1.0#/$defs/evidenced_hmac"}],
+      "properties": {"evidence": {"$ref": "#/$defs/trace_evidence"}}
     }
   }
 }
