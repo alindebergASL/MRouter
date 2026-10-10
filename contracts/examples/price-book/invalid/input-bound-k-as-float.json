@@ -120,7 +120,7 @@
       ],
       "input_bound": {
         "tokenizer_id": "tok_illustrative_v1",
-        "k": "0.31",
+        "k": 0.31,
         "per_message_overhead_tokens": 8,
         "certification": {
           "corpus_id": "corpus_illustrative_2025q4",

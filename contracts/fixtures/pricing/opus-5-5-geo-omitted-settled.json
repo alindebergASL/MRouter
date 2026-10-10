@@ -1,6 +1,6 @@
 {
   "schema_version": "0.1.0",
-  "fixture_id": "opus-5-5-speed-unrecognized",
+  "fixture_id": "opus-5-5-geo-omitted-settled",
   "referenced_by": [
     "M5",
     "B3"
@@ -16,9 +16,9 @@
     "at": "2026-10-09T12:00:00Z",
     "org_id": null,
     "dimensions": {
-      "speed": "turbo",
+      "speed": null,
       "service_tier": null,
-      "inference_geo": "global"
+      "inference_geo": null
     }
   },
   "usage": {
@@ -35,7 +35,7 @@
   "expected": {
     "priced": false,
     "unpriced_dimensions": [
-      "speed"
+      "inference_geo"
     ]
   }
 }

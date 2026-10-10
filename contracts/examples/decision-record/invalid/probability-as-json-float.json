@@ -61,6 +61,7 @@
     "provider_confidence": null
   },
   "escalation": null,
+  "experiment_arm": null,
   "chosen_target": {
     "provider": "anthropic",
     "model": "claude-sonnet-4-5",

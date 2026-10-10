@@ -9,11 +9,11 @@
     "schema_version": {"$ref": "urn:purser:contracts:common:0.1.0#/$defs/schema_version"},
     "fixture_id": {"$ref": "urn:purser:contracts:common:0.1.0#/$defs/id"},
     "referenced_by": {
-      "description": "Guarantee IDs whose acceptance tests use this fixture.",
+      "description": "Guarantee IDs whose acceptance tests use this fixture. Ceilings (B6) need their own fixture kind, a Lane B follow-up.",
       "type": "array",
       "minItems": 1,
       "uniqueItems": true,
-      "items": {"enum": ["M2", "M5", "B3", "B6", "P1"]}
+      "items": {"enum": ["M2", "M5", "B3", "P1"]}
     },
     "price_book": {
       "type": "object",
@@ -31,7 +31,7 @@
       "additionalProperties": false
     },
     "request": {
-      "description": "The request settings that select rules. Dimension values are as the client sent them, so a fixture can carry a value the book does not list; null means the request omitted the parameter.",
+      "description": "The settings the attempt was billed under. Dimension values are as sent, so a fixture can carry a value the book does not list; null means the request omitted the parameter, resolved by the rule's when_omitted (a max_listed dimension omitted with no reported value is unpriced for a settled cost).",
       "type": "object",
       "required": ["provider", "model", "at", "org_id", "dimensions"],
       "properties": {
@@ -192,5 +192,6 @@
       },
       "additionalProperties": false
     }
-  }
+  },
+  "$comment": "Cross-field rules, checked by the validator on priced cases: each class cost is exactly tokens x rate / 1,000,000; class tokens equal the usage; the priced classes are exactly the non-zero usage classes; each fee cost is count x unit price and the fees match the usage. For fixtures in fixtures/pricing/, the request matches the referenced entry and its effective window, and each fee's unit price is the book's."
 }

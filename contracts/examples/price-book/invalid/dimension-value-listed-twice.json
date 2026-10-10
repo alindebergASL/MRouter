@@ -74,6 +74,7 @@
           "dimension": "service_tier",
           "dimension_source": "request_param",
           "parameter": "service_tier",
+          "when_omitted": "default_value",
           "default_value": "default",
           "values": [
             {
@@ -103,6 +104,7 @@
           "dimension": "inference_geo",
           "dimension_source": "route_config",
           "parameter": "data_residency",
+          "when_omitted": "unpriced",
           "default_value": null,
           "values": [
             {
@@ -155,6 +157,7 @@
           "dimension": "speed",
           "dimension_source": "request_param",
           "parameter": "speed",
+          "when_omitted": "default_value",
           "default_value": "standard",
           "values": [
             {

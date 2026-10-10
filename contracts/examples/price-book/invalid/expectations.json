@@ -1,4 +1,9 @@
 {
+  "default-value-missing.json": {
+    "path": "/entries/0/rules/3/default_value",
+    "keyword": "type",
+    "why": "when_omitted default_value needs the provider's default; without it an omitted value would be guessed."
+  },
   "dimension-value-listed-twice.json": {
     "path": "",
     "keyword": "semantic:dimension_values_distinct",
@@ -14,6 +19,11 @@
     "keyword": "const",
     "why": "Per-use fees are added after token cost and never multiplied (7.4), so token_multipliers_apply must be false."
   },
+  "input-bound-k-as-float.json": {
+    "path": "",
+    "keyword": "parse:float",
+    "why": "k is an exact decimal string; a float bound could round below the true count (7.3, B1)."
+  },
   "negative-multiplier.json": {
     "path": "/entries/0/rules/1/values/1/multiplier",
     "keyword": "pattern",
@@ -23,6 +33,11 @@
     "path": "/entries/0/rules",
     "keyword": "contains",
     "why": "An entry without a base_rates rule has nothing to fall back to outside the promotion window, so it is rejected rather than priced as zero."
+  },
+  "nonzero-fee-without-cap.json": {
+    "path": "/entries/1/rules/3/max_uses_parameter",
+    "keyword": "type",
+    "why": "A request that can incur a non-zero fee is bounded only if its uses are capped (7.2 item 3, B3)."
   },
   "rate-as-json-number.json": {
     "path": "",

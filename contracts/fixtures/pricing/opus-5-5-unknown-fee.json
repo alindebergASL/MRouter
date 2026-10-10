@@ -1,6 +1,6 @@
 {
   "schema_version": "0.1.0",
-  "fixture_id": "opus-5-5-speed-unrecognized",
+  "fixture_id": "opus-5-5-unknown-fee",
   "referenced_by": [
     "M5",
     "B3"
@@ -16,7 +16,7 @@
     "at": "2026-10-09T12:00:00Z",
     "org_id": null,
     "dimensions": {
-      "speed": "turbo",
+      "speed": null,
       "service_tier": null,
       "inference_geo": "global"
     }
@@ -30,12 +30,17 @@
       "cache_write_unspecified": 0,
       "output": 2000
     },
-    "fees": []
+    "fees": [
+      {
+        "fee_id": "code_execution",
+        "count": 2
+      }
+    ]
   },
   "expected": {
     "priced": false,
     "unpriced_dimensions": [
-      "speed"
+      "fee"
     ]
   }
 }

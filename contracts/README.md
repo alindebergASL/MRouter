@@ -69,10 +69,19 @@ These hold in every schema. [ADR 0004](../docs/adr/0004-contract-conventions.md)
   unrecognized one is stored as null with reason `unrecognized_value`, never as the raw string.
   Denial messages are fixed templates.
 - **Unpriced is never zero** (§6.3). A price book prices only what it lists. A missing model, token
-  class, dimension value, or fee makes the attempt unpriced, and an unpriced request is unbounded under
-  a strict budget (B3).
-- **Patterns mean the same everywhere.** Patterns are anchored and avoid `\d`, `\w`, `\s`, and bare
-  `.`, which differ between Python's `re` and ECMA-262.
+  class, dimension value, or fee makes the attempt unpriced, and so does any value for a dimension the
+  entry has no rule for. An unpriced request is unbounded under a strict budget (B3). A rule's
+  `when_omitted` says how an omitted setting is priced: the provider's fixed default, the highest
+  listed multiplier for a ceiling when the provider resolves it from account settings the relay cannot
+  see (then a settled cost uses the reported value), or unpriced.
+- **Errors are not free by accident.** An upstream error before any output settles at 0 with basis
+  `upstream_error`; an error after output began goes `unknown` and settles from partial stream usage
+  or by ceiling charge, so billed partial output is never recorded as 0.
+- **Patterns mean the same everywhere.** Patterns start with `^`, end with `(?!\n)$` (in Python, `$`
+  alone also matches before a trailing newline), and avoid `\d`, `\w`, `\s`, and bare `.`, which
+  differ between Python's `re` and ECMA-262.
+- **Denials carry the attempt ID natively.** The Anthropic body's `request_id` and the `request-id` or
+  `x-request-id` header equal `purser-attempt-id`, the ID `explain_denial` takes (§7.8).
 
 ## Checking
 
@@ -89,11 +98,16 @@ CI runs it in the `checks` job. It checks:
 2. This README's table lists every schema with the version in its `$id`, and every guarantee ID it
    names exists in `docs/architecture.md`.
 3. Every valid example validates. Every invalid example fails, and every error it raises is the one
-   its `expectations.json` entry names.
+   its `expectations.json` entry names (plus any it lists under `also`).
 4. No JSON here holds a float, NaN, Infinity, or a duplicate key.
-5. The no-free-text lint passes, and its self-test proves it rejects free text.
-6. Router denials with non-retryable statuses (400, 403) avoid the text that makes OpenCode retry.
-7. Pricing fixtures add up exactly, and `opus-5-5-fast-us` is $0.209 = 209,000,000 nd (§6.3, M5).
+5. The no-free-text lint passes, and its self-test proves it rejects free text, open keys, and the
+   other shapes that could smuggle it in.
+6. Router denials with non-retryable statuses (400, 403) avoid every message that makes OpenCode
+   retry or treat the error as a context overflow (its patterns, pinned to a commit).
+7. Cross-field rules a schema cannot express hold (each schema's root `$comment` lists them).
+8. Pricing fixtures are exact: each class cost is tokens × rate / 10⁶, the priced classes and fees
+   are exactly the ones used, the total rounds half-up to nano-dollars, and each fixture matches its
+   price-book entry and effective window. `opus-5-5-fast-us` is $0.209 = 209,000,000 nd (§6.3, M5).
    The rates are verified by the `pricing-auditor` and Lane B's oracle, not by this check.
 
 ## Changing a contract

@@ -35,7 +35,7 @@ from __future__ import annotations
 import json
 import re
 import sys
-from decimal import ROUND_HALF_UP, Decimal
+from decimal import ROUND_HALF_UP, Decimal, Inexact, Rounded, localcontext
 from pathlib import Path
 from typing import Any, Iterator
 
@@ -547,7 +547,7 @@ def _price_book_rules(doc: dict[str, Any]) -> Iterator[tuple[str, str]]:
                 values = [v.get("value") for v in rule.get("values", [])]
                 if len(values) != len(set(values)):
                     yield "dimension_values_distinct", f"{name}: {rule.get('dimension')} lists a value twice"
-                if rule.get("default_value") is not None and rule["default_value"] not in values:
+                if rule.get("when_omitted") == "default_value" and rule.get("default_value") not in values:
                     yield "default_in_values", f"{name}: {rule.get('dimension')} default {rule['default_value']} is not priced"
             elif kind == "per_use_fee":
                 fee_ids.append(rule.get("fee_id"))
@@ -571,11 +571,48 @@ def _overlapping(windows: list[tuple[str, str | None]]) -> bool:
     return any(end is None or end > nxt for (_, end), (nxt, _) in zip(ordered, ordered[1:]))
 
 
+def _exact(fn: Any) -> Any:
+    """Run fn with exact decimal arithmetic: any rounding raises instead of hiding a mismatch."""
+    with localcontext() as ctx:
+        ctx.prec = 200
+        ctx.traps[Inexact] = True
+        ctx.traps[Rounded] = True
+        return fn()
+
+
+def _price_fixture_rules(doc: dict[str, Any]) -> Iterator[tuple[str, str]]:
+    expected = doc.get("expected", {})
+    if expected.get("priced") is not True:
+        return
+    usage = doc.get("usage", {})
+    classes = expected.get("classes", {})
+    used = {k for k, v in usage.get("tokens", {}).items() if v}
+    if set(classes) != used:
+        yield "classes_cover_usage", f"priced classes {sorted(classes)} differ from the non-zero usage classes {sorted(used)}"
+    for name, c in classes.items():
+        if c["tokens"] != usage.get("tokens", {}).get(name):
+            yield "class_tokens_match_usage", f"{name}: {c['tokens']} tokens priced, usage says {usage.get('tokens', {}).get(name)}"
+        cost = _exact(lambda: (Decimal(c["tokens"]) * Decimal(c["rate_usd_per_mtok"])).scaleb(-6))
+        if cost != Decimal(c["cost_usd"]):
+            yield "class_cost_exact", f"{name}: {c['tokens']} x {c['rate_usd_per_mtok']} / 10^6 = {cost}, not {c['cost_usd']}"
+    used_fees = {f["fee_id"]: f["count"] for f in usage.get("fees", []) if f["count"]}
+    priced_fees = {f["fee_id"]: f for f in expected.get("fees", [])}
+    if set(priced_fees) != set(used_fees):
+        yield "fees_match_usage", f"priced fees {sorted(priced_fees)} differ from the used fees {sorted(used_fees)}"
+    for fee_id, f in priced_fees.items():
+        if f["count"] != used_fees.get(fee_id):
+            yield "fees_match_usage", f"{fee_id}: {f['count']} uses priced, usage says {used_fees.get(fee_id)}"
+        cost = _exact(lambda: Decimal(f["count"]) * Decimal(f["unit_price_usd"]))
+        if cost != Decimal(f["cost_usd"]):
+            yield "fee_cost_exact", f"{fee_id}: {f['count']} x {f['unit_price_usd']} = {cost}, not {f['cost_usd']}"
+
+
 SEMANTIC_RULES = {
     "attempt": _attempt_rules,
     "usage-event": _usage_event_rules,
     "error-envelope": _error_envelope_rules,
     "price-book": _price_book_rules,
+    "price-fixture": _price_fixture_rules,
 }
 
 
@@ -842,8 +879,20 @@ def check_pricing_fixtures(
         else:
             if book.get("price_book_version") != ref.get("price_book_version"):
                 failures.add(rel(path), "price_book_version does not match the referenced book")
-            if ref.get("entry_id") not in {e.get("entry_id") for e in book.get("entries", [])}:
+            entry = next((e for e in book.get("entries", []) if e.get("entry_id") == ref.get("entry_id")), None)
+            if entry is None:
                 failures.add(rel(path), f"entry {ref.get('entry_id')} not in the referenced book")
+            else:
+                request = doc.get("request", {})
+                if (request.get("provider"), request.get("model")) != (entry.get("provider"), entry.get("model")):
+                    failures.add(rel(path), "request provider and model do not match the referenced entry")
+                at, start, end = request.get("at"), entry.get("effective_from"), entry.get("effective_until")
+                if at and start and (instant(at) < instant(start) or (end and instant(at) >= instant(end))):
+                    failures.add(rel(path), "request.at is outside the entry's effective window (P1)")
+                book_fees = {r.get("fee_id"): r.get("unit_price_usd") for r in entry.get("rules", []) if r.get("type") == "per_use_fee"}
+                for fee in doc.get("expected", {}).get("fees", []):
+                    if fee.get("unit_price_usd") != book_fees.get(fee.get("fee_id")):
+                        failures.add(rel(path), f"fee {fee.get('fee_id')} is not priced at the book's unit price")
         expected = doc.get("expected", {})
         if expected.get("priced") is True:
             costs = [Decimal(c["cost_usd"]) for c in expected.get("classes", {}).values()]

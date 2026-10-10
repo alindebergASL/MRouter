@@ -42,6 +42,7 @@
   "decision_model": null,
   "decision_model_output": null,
   "escalation": null,
+  "experiment_arm": null,
   "chosen_target": {
     "provider": "anthropic",
     "model": "claude-haiku-4-5",

@@ -62,6 +62,7 @@
     "rationale": "placeholder for free text the decision model returned"
   },
   "escalation": null,
+  "experiment_arm": null,
   "chosen_target": {
     "provider": "anthropic",
     "model": "claude-sonnet-4-5",

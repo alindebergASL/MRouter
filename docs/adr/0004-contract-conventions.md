@@ -45,14 +45,18 @@ counts as 0.
 ## Consequences
 
 - A float, a silent zero, or a free-text field in a contract fails CI rather than review.
+- Every pattern ends in `(?!\n)$`, because in Python `$` alone also matches before a trailing newline.
 - An identifier format can still carry a short token such as `ignore_previous_instructions` or base64.
   The lint stops prose and whitespace, not encoding. It also means the allowlisted formats in
   `common.schema.json` deserve review whenever one changes.
 - JSON consumers must parse nano-dollars as 64-bit integers. In JavaScript that means `BigInt` or a
   JSON parser that keeps large integers, because doubles lose precision above 2^53 (about $9.0 million).
 - Upgrading `jsonschema` is a protected change, made in a spec-change session.
-- The pieces around the validator are not protected: `scripts/check-contracts.sh`, the Makefile target,
-  and the CI step. A normal session could stop CI from running the check, but not change what it
-  checks. CODEOWNERS review of `.github/` and the Makefile is the backstop.
+- The pieces around the validator are not protected: `scripts/check-contracts.sh` (including its pip flags and the
+  requirements path), the `check-contracts` Makefile target, and the Contracts step in `.github/workflows/ci.yml`.
+  Neither spec-guard nor CODEOWNERS covers them, CODEOWNERS is advisory, and branch protection requires no
+  approving review. So an ordinary pull request could remove or neuter the check while the required `checks` job
+  still passes. Today the only backstop is the owner reading the diff. Hardening it (for example a separate,
+  protected workflow file whose job is a required check) is an open question in the contracts v0 pull request.
 - Revisit when a lane needs a free-text field (it would need its own guarantee argument), or at 1.0.0,
   when the versioning rule tightens to strict semver.

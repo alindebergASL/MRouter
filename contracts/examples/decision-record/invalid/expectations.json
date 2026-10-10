@@ -54,6 +54,11 @@
     "keyword": "parse:float",
     "why": "Probabilities are exact-decimal strings, never JSON floats, so replay compares the same exact value everywhere."
   },
+  "random-split-without-arm.json": {
+    "path": "/experiment_arm",
+    "keyword": "not",
+    "why": "Arms are compared per episode (8.4); without the arm, two arms that pick the same model are indistinguishable."
+  },
   "stage-route-in-live-mode.json": {
     "path": "/mode",
     "keyword": "const",

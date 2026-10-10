@@ -51,6 +51,7 @@
     "provider_confidence": null
   },
   "escalation": null,
+  "experiment_arm": null,
   "chosen_target": {
     "provider": "openrouter",
     "model": "anthropic/claude-opus-5-5",

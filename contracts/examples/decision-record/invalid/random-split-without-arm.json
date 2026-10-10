@@ -1,39 +1,37 @@
 {
   "schema_version": "0.1.0",
-  "decision_id": "39a0b1c2-d3e4-4f56-8a7b-8c9d0e1f2a3b",
+  "decision_id": "9fa6b7c8-d9e0-45bc-8a3b-4c5d6e7f8091",
   "actuator": "proxy",
-  "decided_at": "2026-10-08T17:05:58.731Z",
+  "decided_at": "2026-10-08T19:30:15.000Z",
   "mode": "shadow",
   "policy_version": "policy_v12",
   "episode": {
     "kind": "harness_session",
-    "session_id": "sess_codex_19b2"
+    "session_id": "sess_ab_0311"
   },
-  "attempt_id": "4ab1c2d3-e4f5-4067-9b8c-9d0e1f2a3b4c",
+  "attempt_id": "a0b7c8d9-e0f1-46cd-9b4c-5d6e7f8091a2",
   "route": {
-    "route_id": "route_stage_signals",
-    "route_type": "stage"
+    "route_id": "route_ab_baseline",
+    "route_type": "random_split"
   },
   "input_features": {
-    "request_class": "unknown",
-    "requested_model": "gpt-5-codex",
+    "request_class": "main",
+    "requested_model": "claude-opus-5-5",
     "turn_index": {
-      "value": 6,
+      "value": 0,
       "evidence": "measured"
     },
     "context_tokens": {
-      "value": 52840,
+      "value": 15022,
       "evidence": "measured"
     },
     "tool_calls_in_context": {
       "value": 0,
-      "evidence": "unavailable",
-      "unavailable_reason": "not_reported"
+      "evidence": "measured"
     },
     "tool_errors_in_context": {
-      "value": null,
-      "evidence": "unavailable",
-      "unavailable_reason": "not_reported"
+      "value": 0,
+      "evidence": "measured"
     },
     "consecutive_bad_turns": {
       "value": 0,
@@ -45,8 +43,8 @@
   "escalation": null,
   "experiment_arm": null,
   "chosen_target": {
-    "provider": "openai",
-    "model": "gpt-5-mini",
-    "tier": "fast"
+    "provider": "anthropic",
+    "model": "claude-opus-5-5",
+    "tier": null
   }
 }

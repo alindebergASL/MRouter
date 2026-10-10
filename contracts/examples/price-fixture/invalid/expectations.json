@@ -4,6 +4,11 @@
     "keyword": "type",
     "why": "USD amounts are exact-decimal strings even when whole; the JSON number 20 is rejected so no consumer reads money as a number."
   },
+  "class-cost-not-tokens-times-rate.json": {
+    "path": "",
+    "keyword": "semantic:class_cost_exact",
+    "why": "Each class cost is exactly tokens x rate / 10^6 (6.4); a fixture that disagrees would certify a wrong oracle."
+  },
   "priced-with-unpriced-dimensions.json": {
     "path": "/expected",
     "keyword": "additionalProperties",
@@ -23,5 +28,10 @@
     "path": "/expected",
     "keyword": "required",
     "why": "An unpriced expectation must name the uncovered dimensions so the test proves why the attempt is unpriced (M5, B3)."
+  },
+  "used-class-left-unpriced.json": {
+    "path": "",
+    "keyword": "semantic:classes_cover_usage",
+    "why": "Every token class the usage incurs is priced; leaving one out would price it at zero (6.3)."
   }
 }

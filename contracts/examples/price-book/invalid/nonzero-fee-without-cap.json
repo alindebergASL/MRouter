@@ -203,7 +203,7 @@
           "usage_field": "usage.server_tool_use.example_search_requests",
           "unit_price_usd": "0.025",
           "billed_on_error": true,
-          "max_uses_parameter": "max_uses",
+          "max_uses_parameter": null,
           "token_multipliers_apply": false
         },
         {

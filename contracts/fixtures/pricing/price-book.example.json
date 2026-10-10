@@ -48,6 +48,7 @@
           "dimension": "speed",
           "dimension_source": "request_param",
           "parameter": "speed",
+          "when_omitted": "default_value",
           "default_value": "standard",
           "values": [
             {
@@ -61,15 +62,38 @@
           ]
         },
         {
+          "type": "speed_or_service_tier",
+          "source": {
+            "url": "https://platform.claude.com/docs/en/api/service-tiers",
+            "as_of": "2026-10-10"
+          },
+          "dimension": "service_tier",
+          "dimension_source": "request_param",
+          "parameter": "service_tier",
+          "when_omitted": "default_value",
+          "default_value": "auto",
+          "values": [
+            {
+              "value": "auto",
+              "multiplier": "1"
+            },
+            {
+              "value": "standard_only",
+              "multiplier": "1"
+            }
+          ]
+        },
+        {
           "type": "geography",
           "source": {
-            "url": "https://platform.claude.com/docs/en/about-claude/pricing#data-residency-pricing",
-            "as_of": "2026-10-09"
+            "url": "https://platform.claude.com/docs/en/manage-claude/data-residency",
+            "as_of": "2026-10-10"
           },
           "dimension": "inference_geo",
           "dimension_source": "request_param",
           "parameter": "inference_geo",
-          "default_value": "global",
+          "when_omitted": "max_listed",
+          "default_value": null,
           "values": [
             {
               "value": "global",

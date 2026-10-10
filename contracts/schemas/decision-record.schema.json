@@ -18,7 +18,8 @@
     "decision_model",
     "decision_model_output",
     "chosen_target",
-    "escalation"
+    "escalation",
+    "experiment_arm"
   ],
   "properties": {
     "schema_version": {"$ref": "urn:purser:contracts:common:0.1.0#/$defs/schema_version"},
@@ -72,6 +73,18 @@
     "escalation": {
       "description": "For an escalation route, the estimated cache re-warm cost its decision includes (8.5, change 5) and the price-book version that priced the estimate; null for every other route.",
       "oneOf": [{"$ref": "#/$defs/escalation_estimate"}, {"type": "null"}]
+    },
+    "experiment_arm": {
+      "description": "For a random-split route, the arm this episode was assigned (8.4; 8.5, change 6). Assignment is per episode and a deterministic function of the episode, route_id, and policy_version, so replay reproduces it (R1); null for every other route.",
+      "oneOf": [
+        {
+          "type": "object",
+          "required": ["arm"],
+          "properties": {"arm": {"$ref": "urn:purser:contracts:common:0.1.0#/$defs/id"}},
+          "additionalProperties": false
+        },
+        {"type": "null"}
+      ]
     }
   },
   "additionalProperties": false,
@@ -133,6 +146,17 @@
       },
       "then": {"properties": {"escalation": {"$ref": "#/$defs/escalation_estimate"}}},
       "else": {"properties": {"escalation": {"type": "null"}}}
+    },
+    {
+      "$comment": "Only a random-split decision assigns an experiment arm.",
+      "if": {
+        "properties": {
+          "route": {"properties": {"route_type": {"const": "random_split"}}, "required": ["route_type"]}
+        },
+        "required": ["route"]
+      },
+      "then": {"properties": {"experiment_arm": {"not": {"type": "null"}}}},
+      "else": {"properties": {"experiment_arm": {"type": "null"}}}
     }
   ],
   "$defs": {
@@ -218,7 +242,7 @@
           "$ref": "urn:purser:contracts:common:0.1.0#/$defs/id"
         },
         "call_attempt_id": {
-          "description": "The metered attempt for the decision-model call (8.5, change 4); null when the output was replayed from a record instead of called.",
+          "description": "The metered attempt for the decision-model call (8.5, change 4). A decision held by episode affinity (8.1; 8.5, lift 3) repeats the episode's original decision_model and decision_model_output and carries that call's call_attempt_id, so the record replays on its own (R1) and the call is metered once. null only when the output was replayed offline from a record.",
           "oneOf": [{"$ref": "urn:purser:contracts:common:0.1.0#/$defs/uuid"}, {"type": "null"}]
         }
       },

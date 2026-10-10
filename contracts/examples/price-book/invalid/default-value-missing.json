@@ -75,7 +75,7 @@
           "dimension_source": "request_param",
           "parameter": "service_tier",
           "when_omitted": "default_value",
-          "default_value": "default",
+          "default_value": null,
           "values": [
             {
               "value": "default",
