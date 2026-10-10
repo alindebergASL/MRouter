@@ -7,6 +7,66 @@
 
 name: purser-dev
 
+x-cp-tools: &cp-tools
+  image: public.ecr.aws/docker/library/python:3.13.16-slim-trixie@sha256:70729b46c69b4f1e97c4822c1af3df53a1476cf5ddc6c087c0c10bc3a5678c2f
+  working_dir: /src/controlplane
+  entrypoint: ["/src/controlplane/scripts/tools-entrypoint.sh"]
+  volumes:
+    # The repository read-only; only controlplane/ (lock files, the OpenAPI
+    # document, formatting) is writable.
+    - ../..:/src:ro
+    - ../../controlplane:/src/controlplane
+    - cp-venv:/venv
+    - cp-cache:/cache
+  environment:
+    PYTHONDONTWRITEBYTECODE: "1"
+    UV_PROJECT_ENVIRONMENT: /venv
+    UV_CACHE_DIR: /cache/uv
+    UV_LINK_MODE: copy
+    UV_PYTHON_DOWNLOADS: never
+    PIP_CACHE_DIR: /cache/pip
+    PIP_DISABLE_PIP_VERSION_CHECK: "1"
+    # Settings for tests and local runs against the dev stack. Development-only
+    # credentials. Not secrets; never reuse them anywhere else.
+    PURSER_ENV: dev
+    PURSER_DB_URL: postgresql+psycopg://purser_cp_app:cp-app-dev-only-not-a-secret@postgres:5432/purser_dev
+    PURSER_DB_SWEEPER_URL: postgresql+psycopg://purser_cp_sweeper:cp-sweeper-dev-only-not-a-secret@postgres:5432/purser_dev
+    PURSER_DB_OWNER_URL: postgresql+psycopg://purser_cp_owner:cp-owner-dev-only-not-a-secret@postgres:5432/purser_dev
+    PURSER_TEST_DB_ADMIN_URL: postgresql+psycopg://purser_dev:purser-dev-only-not-a-secret@postgres:5432/purser_dev
+    PURSER_OIDC_ISSUER: http://localhost:58080/realms/purser-dev
+    PURSER_KEYCLOAK_URL: http://localhost:58080
+    PURSER_KEYCLOAK_REALM: purser-dev
+    PURSER_KEYCLOAK_CLIENT_ID: purser-controlplane
+    PURSER_KEYCLOAK_CLIENT_SECRET: controlplane-dev-only-not-a-secret
+
+x-controlplane: &controlplane
+  # The control-plane image (deploy/images/controlplane/Dockerfile), run the
+  # way production runs it: non-root, read-only root filesystem, a tmpfs at
+  # /tmp only, no capabilities. Started by `make dev-up-app`, not `make dev-up`.
+  build:
+    context: ../..
+    dockerfile: deploy/images/controlplane/Dockerfile
+  profiles: ["app"]
+  user: "65532:65532"
+  read_only: true
+  tmpfs:
+    - /tmp
+  cap_drop: ["ALL"]
+  security_opt: ["no-new-privileges:true"]
+  environment: &controlplane-env
+    # Development-only credentials. Not secrets; never reuse them anywhere else.
+    # Production injects these from AWS Secrets Manager (ADR 0003).
+    # Each service adds the one database URL its role needs (below): the API
+    # never holds the owner's or the sweeper's credentials.
+    PURSER_ENV: dev
+    PURSER_OIDC_ISSUER: http://localhost:58080/realms/purser-dev
+    # Backchannel: the issuer's public URL isn't reachable from this container.
+    PURSER_OIDC_DISCOVERY_URL: http://keycloak:58080/realms/purser-dev/.well-known/openid-configuration
+    PURSER_KEYCLOAK_URL: http://keycloak:58080
+    PURSER_KEYCLOAK_REALM: purser-dev
+    PURSER_KEYCLOAK_CLIENT_ID: purser-controlplane
+    PURSER_KEYCLOAK_CLIENT_SECRET: controlplane-dev-only-not-a-secret
+
 services:
   postgres:
     # Production major version (Amazon RDS for PostgreSQL 18). See ADR 0002.
@@ -59,6 +119,8 @@ services:
     depends_on:
       keycloak-db-init:
         condition: service_completed_successfully
+      controlplane-db-init:
+        condition: service_completed_successfully
     environment:
       KC_DB: postgres
       KC_DB_URL: jdbc:postgresql://postgres:5432/keycloak
@@ -90,5 +152,94 @@ services:
       start_period: 120s
       start_interval: 2s
 
+  controlplane-db-init:
+    # One-shot: the control plane's roles (owner, app, sweeper) and its schema in
+    # purser_dev, for row-level security. Idempotent; runs on every `up`.
+    # It runs after keycloak-db-init, never beside it: both change purser_dev's
+    # ACL, and concurrent changes fail with "tuple concurrently updated".
+    image: public.ecr.aws/docker/library/postgres:18.6-trixie@sha256:74935e72241653ca55e0414067e6d8763aceb8a810eb51b452253ec3dcfc4336
+    depends_on:
+      keycloak-db-init:
+        condition: service_completed_successfully
+    environment:
+      PGPASSWORD: purser-dev-only-not-a-secret
+    entrypoint: ["psql", "-h", "postgres", "-U", "purser_dev", "-d", "purser_dev",
+                 "-v", "ON_ERROR_STOP=1", "-q", "-f", "/init/controlplane-db.sql"]
+    volumes:
+      - ./controlplane/controlplane-db.sql:/init/controlplane-db.sql:ro
+    restart: "no"
+
+  cp-tools:
+    # The control plane's toolchain: Python 3.13 (the runtime image's minor
+    # version), uv, ruff, mypy, pytest. Run through `make cp-*`, never started by
+    # `make dev-up`. It shares Keycloak's network namespace, so the issuer URL
+    # http://localhost:58080 works here exactly as on the host, and Postgres is
+    # postgres:5432.
+    <<: *cp-tools
+    profiles: ["tools"]
+    network_mode: "service:keycloak"
+    depends_on:
+      keycloak:
+        condition: service_healthy
+      controlplane-db-init:
+        condition: service_completed_successfully
+
+  cp-tools-solo:
+    # The same toolchain on its own network, for work that needs no stack
+    # (locking, lint, unit tests, the Stop hook).
+    <<: *cp-tools
+    profiles: ["tools"]
+
+  controlplane-migrate:
+    # One-shot: migrate the schema as the owner role, then apply the dev seed.
+    <<: *controlplane
+    environment:
+      <<: *controlplane-env
+      PURSER_DB_URL: postgresql+psycopg://purser_cp_owner:cp-owner-dev-only-not-a-secret@postgres:5432/purser_dev
+      PURSER_DB_OWNER_URL: postgresql+psycopg://purser_cp_owner:cp-owner-dev-only-not-a-secret@postgres:5432/purser_dev
+    command: ["-c", "from purser_controlplane.__main__ import main; main(['migrate']); main(['dev-seed'])"]
+    depends_on:
+      controlplane-db-init:
+        condition: service_completed_successfully
+    restart: "no"
+
+  controlplane:
+    # The admin API on 127.0.0.1:58180, as the app role (no BYPASSRLS).
+    <<: *controlplane
+    environment:
+      <<: *controlplane-env
+      PURSER_DB_URL: postgresql+psycopg://purser_cp_app:cp-app-dev-only-not-a-secret@postgres:5432/purser_dev
+    ports:
+      - "127.0.0.1:58180:8080"
+    depends_on:
+      controlplane-migrate:
+        condition: service_completed_successfully
+      keycloak:
+        condition: service_healthy
+    healthcheck:
+      # No shell or curl in the image: ask its own Python.
+      test: ["CMD", "/usr/bin/python3", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/readyz', timeout=2)"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 30s
+      start_interval: 1s
+
+  controlplane-sweeper:
+    # Finishes or rolls back rows left pending by a failed Keycloak call.
+    <<: *controlplane
+    environment:
+      <<: *controlplane-env
+      PURSER_DB_URL: postgresql+psycopg://purser_cp_sweeper:cp-sweeper-dev-only-not-a-secret@postgres:5432/purser_dev
+      PURSER_DB_SWEEPER_URL: postgresql+psycopg://purser_cp_sweeper:cp-sweeper-dev-only-not-a-secret@postgres:5432/purser_dev
+    command: ["-m", "purser_controlplane", "sweep"]
+    depends_on:
+      controlplane-migrate:
+        condition: service_completed_successfully
+      keycloak:
+        condition: service_healthy
+
 volumes:
   pgdata:
+  cp-venv:
+  cp-cache:

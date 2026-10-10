@@ -14,6 +14,10 @@ budgets and metering every request. Spec: docs/architecture.md. Guarantee IDs
 - Pass-through traffic is forwarded byte for byte.
 - Images carry no credentials, run as non-root on a read-only root filesystem,
   and contain the same binary as the native release.
+- Every install generates its own secrets and keys; no default credentials
+  outside dev.
+- Every request-path query on org data filters by org ID. Row-level security backs
+  it up on control-plane tables; the ledger takes the org explicitly and fails closed.
 
 ## Workflow
 1. Plan mode first; reference the guarantee IDs the change affects.

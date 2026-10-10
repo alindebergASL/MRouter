@@ -4,7 +4,9 @@ Compose files for running Purser's containers.
 
 | File | Purpose |
 |---|---|
-| `dev.yaml` | The build's development stack. Today: Postgres and Keycloak. Later: mock providers, recorder, relay, control plane, console, Toxiproxy (build plan §2.8). |
+| `dev.yaml` | The build's development stack. Today: Postgres, Keycloak, and (profile `app`) the control plane. Later: mock providers, recorder, relay, console, Toxiproxy (build plan §2.8). |
+| `controlplane/` | The control plane's database roles and schema (row-level security). |
+| `cloud.override.yaml` | Cloud sessions only, added by the Makefile: the egress CA for tool containers and image builds. |
 | `keycloak/` | Keycloak's database init SQL and the dev realms imported at start (`realms/`). |
 | `sidecar.yaml` | (Later, Lane C) The single-host sidecar (architecture §9, D3). |
 
@@ -15,6 +17,7 @@ make dev-up      # start and wait until every service is healthy
 make dev-psql    # psql shell
 make dev-check   # smoke-check Keycloak: issuer, token claims, admin events
 make dev-token WHO=bob   # print a dev-realm access token (alice or bob)
+make dev-up-app  # also build and start the control plane (API on 127.0.0.1:58180)
 make dev-down    # stop (keeps the data volume); make dev-reset also deletes it
 ```
 
@@ -26,6 +29,11 @@ SessionStart hook starts it), and in GitHub Actions (`.github/workflows/ci.yml`)
 | `postgres` | `postgres:18.6-trixie` from public ECR, pinned by digest (ADR 0002) | `127.0.0.1:55432` | user `purser_dev`, password `purser-dev-only-not-a-secret`, database `purser_dev` |
 | `keycloak-db-init` | same Postgres image; one-shot | none | creates role `keycloak_dev` (password `keycloak-db-dev-only-not-a-secret`) and database `keycloak`; revokes PUBLIC's CONNECT on both databases, so each admits only its own roles |
 | `keycloak` | `quay.io/keycloak/keycloak:26.8.0`, pinned by digest (ADR 0003) | `127.0.0.1:58080` | bootstrap admin `admin` / `keycloak-admin-dev-only-not-a-secret` (master realm) |
+| `controlplane-db-init` | same Postgres image; one-shot | none | roles `purser_cp_owner`, `purser_cp_app`, `purser_cp_sweeper` (passwords `cp-<role>-dev-only-not-a-secret`) and schema `controlplane` in `purser_dev` |
+| `controlplane-migrate` | the control-plane image; one-shot, profile `app` | none | migrates as the owner role, then applies the dev seed |
+| `controlplane` | the control-plane image, profile `app` | `127.0.0.1:58180` | runs non-root, read-only, no capabilities; dev Keycloak client secret `controlplane-dev-only-not-a-secret` |
+| `controlplane-sweeper` | the control-plane image, profile `app` | none | finishes or rolls back pending rows |
+| `cp-tools`, `cp-tools-solo` | `python:3.13.16-slim-trixie` from public ECR, pinned; profile `tools` | none | the control plane's toolchain, run by `make cp-*`; `cp-tools` shares Keycloak's network namespace |
 
 Connection string: `postgresql://purser_dev:purser-dev-only-not-a-secret@127.0.0.1:55432/purser_dev`.
 These credentials are for this local stack only and are not secrets.
