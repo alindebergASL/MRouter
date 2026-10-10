@@ -45,6 +45,81 @@ jobs:
         if: always()
         run: make dev-down
 
+  controlplane:
+    # Lint, type-check, and every test, in the pinned Python 3.13 tool
+    # container against the dev stack (Postgres and Keycloak).
+    name: controlplane
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Start the dev stack
+        run: make dev-up
+
+      - name: Lint (ruff check, ruff format --check, mypy --strict)
+        run: make cp-lint
+
+      - name: Tests (unit and integration)
+        run: make cp-test
+
+      - name: Show stack logs
+        if: failure()
+        run: docker compose -f deploy/compose/dev.yaml logs --no-color
+
+      - name: Stop the dev stack
+        if: always()
+        run: make dev-down
+
+  controlplane-image:
+    # D2 for the control-plane image, built natively on each architecture.
+    name: controlplane-image (${{ matrix.arch }})
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-24.04
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Plant a canary in the build environment
+        run: echo "PURSER_BUILD_CANARY=purser-canary-$(openssl rand -hex 16)" >> "$GITHUB_ENV"
+
+      - name: Build the image
+        run: make cp-image
+
+      - name: Image is linux/${{ matrix.arch }}
+        run: |
+          got=$(docker image inspect -f '{{.Os}}/{{.Architecture}}' purser-controlplane:dev)
+          echo "image platform: $got"
+          test "$got" = "linux/${{ matrix.arch }}"
+
+      - name: Start the dev stack
+        run: make dev-up
+
+      - name: D2 checks (non-root, no shell or package manager, read-only, no canary)
+        run: make cp-image-check
+
+      - name: The app profile starts (migrate, seed, API, sweeper)
+        run: make dev-up-app
+
+      - name: Show stack logs
+        if: failure()
+        run: docker compose -f deploy/compose/dev.yaml --profile app logs --no-color
+
+      - name: Stop the dev stack
+        if: always()
+        run: docker compose -f deploy/compose/dev.yaml --profile app down
+
   checks:
     name: checks
     runs-on: ubuntu-24.04

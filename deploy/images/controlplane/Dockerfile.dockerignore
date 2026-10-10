@@ -1,0 +1,11 @@
+# Build context for deploy/images/controlplane/Dockerfile (the repository root):
+# send only what the image needs, so nothing else in the working tree (an .env
+# file, a local key, a recording) can reach a layer.
+*
+!controlplane/requirements.lock
+!controlplane/alembic.ini
+!controlplane/alembic/env.py
+!controlplane/alembic/script.py.mako
+!controlplane/alembic/versions/*.py
+!controlplane/src/purser_controlplane/**/*.py
+**/__pycache__
