@@ -97,7 +97,9 @@ control plane require `acr=mfa`. Direct grants always yield `acr=pwd`.
 **Admin events** are saved with 7-day retention (`adminEventsExpiration` 604800 s) and without
 representations, so a reconciler outage can catch up (ADR 0003). User attribute `purser_id`
 (admin-only, declared in the user profile) holds the control plane's own ID, for idempotent
-creation; organizations carry the same attribute.
+creation; organizations carry the same attribute. Users can't change their own email or username
+(admin-edit only): identities are provisioned by the control plane, and a self-set address could
+otherwise squat on someone else's.
 
 **The admin-API client's roles** (on `realm-management`, granted to the service account and
 mapped into its token scope, with full scope off): `view-users`, `query-users`, `manage-users`,

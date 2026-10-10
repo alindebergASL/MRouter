@@ -81,6 +81,15 @@ assert r["adminEventsDetailsEnabled"] is False, "admin events include representa
 assert r["attributes"].get("adminEventsExpiration") == "604800", r["attributes"].get("adminEventsExpiration")
 assert r["organizationsEnabled"] is True
 print("ok: admin events saved, 7-day retention, no representations")'
+curl -fsS --noproxy '*' -H "Authorization: Bearer $sa" "$base/admin/realms/$realm/users/profile" | json '
+import json, sys
+attrs = {a["name"]: a for a in json.load(sys.stdin)["attributes"]}
+# Users may not change their own email or username: identities are provisioned
+# by the control plane, and a self-set address could squat on another person.
+for name in ("email", "username"):
+    assert attrs[name]["permissions"]["edit"] == ["admin"], (name, attrs[name]["permissions"])
+assert attrs["purser_id"]["permissions"] == {"view": ["admin"], "edit": ["admin"]}
+print("ok: email, username, and purser_id are admin-edit only")'
 code=$(curl -sS --noproxy '*' -o /dev/null -w '%{http_code}' -H "Authorization: Bearer $sa" "$base/admin/realms/$realm/clients")
 [ "$code" = 403 ] || fail "admin-API client can list clients (HTTP $code); it should not"
 echo "ok: admin-API client cannot list clients"
