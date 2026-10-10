@@ -23,6 +23,7 @@ x-build-with-ca: &build-with-ca
 services:
   cp-tools: *egress-ca
   cp-tools-solo: *egress-ca
+  console-tools: *egress-ca
   # The image build fetches wheels from PyPI; the CA is a build secret only.
   controlplane-migrate: *build-with-ca
   controlplane: *build-with-ca
