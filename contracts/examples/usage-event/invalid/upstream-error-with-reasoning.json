@@ -1,11 +1,11 @@
 {
   "schema_version": "0.1.0",
-  "attempt_id": "4d906e2c-7f51-4a03-9e43-516270808ea4",
-  "revision": 2,
-  "recorded_at": "2026-10-08T09:12:41.000Z",
+  "attempt_id": "b5a8d0a4-f7d9-4c8b-86cb-d9eaf8a8a63d",
+  "revision": 1,
+  "recorded_at": "2026-10-08T22:01:05.288Z",
   "state": "settled",
-  "dispatched_at": "2026-10-06T09:12:40.003Z",
-  "settled_at": "2026-10-08T09:12:41.000Z",
+  "dispatched_at": "2026-10-08T22:01:05.102Z",
+  "settled_at": "2026-10-08T22:01:05.244Z",
   "identity": {
     "org_id": "org_acme",
     "workspace_id": "ws_main",
@@ -26,14 +26,13 @@
       "evidence": "measured"
     },
     "provider_request_id": {
-      "value": null,
-      "evidence": "unavailable",
-      "unavailable_reason": "not_reported"
+      "value": "req_synthetic_k11",
+      "evidence": "measured"
     },
     "provider_message_id_hmac": {
       "value": null,
       "evidence": "unavailable",
-      "unavailable_reason": "no_response"
+      "unavailable_reason": "error_response"
     },
     "retry_of_attempt_id": null
   },
@@ -58,29 +57,30 @@
       "value": "global"
     },
     "long_context_applied": {
-      "value": false
+      "value": null,
+      "unavailable_reason": "not_reported"
     }
   },
   "tokens": {
     "uncached_input": {
       "value": null,
       "evidence": "unavailable",
-      "unavailable_reason": "no_response"
+      "unavailable_reason": "error_response"
     },
     "cache_read": {
       "value": null,
       "evidence": "unavailable",
-      "unavailable_reason": "no_response"
+      "unavailable_reason": "error_response"
     },
     "cache_write_5m": {
       "value": null,
       "evidence": "unavailable",
-      "unavailable_reason": "no_response"
+      "unavailable_reason": "error_response"
     },
     "cache_write_1h": {
       "value": null,
       "evidence": "unavailable",
-      "unavailable_reason": "no_response"
+      "unavailable_reason": "error_response"
     },
     "cache_write_unspecified": {
       "value": null,
@@ -90,24 +90,23 @@
     "output": {
       "value": null,
       "evidence": "unavailable",
-      "unavailable_reason": "no_response"
+      "unavailable_reason": "error_response"
     },
     "reasoning": {
-      "value": null,
-      "evidence": "unavailable",
-      "unavailable_reason": "no_response"
+      "value": 5000,
+      "evidence": "measured"
     },
     "cache_write_total": {
       "value": null,
       "evidence": "unavailable",
-      "unavailable_reason": "no_response"
+      "unavailable_reason": "error_response"
     }
   },
   "fees": [],
   "computed_cost": {
-    "nanodollars": 1640000000,
+    "nanodollars": 0,
     "evidence": "inferred",
-    "basis": "ceiling_charge"
+    "basis": "upstream_error"
   },
   "provider_billed_cost": {
     "nanodollars": null,
@@ -116,14 +115,12 @@
   },
   "timing": {
     "ttfb_ms": {
-      "value": null,
-      "evidence": "unavailable",
-      "unavailable_reason": "no_response"
+      "value": 140,
+      "evidence": "measured"
     },
     "duration_ms": {
-      "value": null,
-      "evidence": "unavailable",
-      "unavailable_reason": "no_response"
+      "value": 142,
+      "evidence": "measured"
     }
   },
   "flags": []

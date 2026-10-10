@@ -422,7 +422,7 @@
       }
     },
     {
-      "$comment": "An error before any output began is charged 0 and inferred from the error status, only on a settled attempt, and only if no output was produced: every priced count and fee count is 0 or absent (error_response). Billed partial output is never recorded as 0.",
+      "$comment": "An error before any output began is charged 0 and inferred from the error status, only on a settled attempt, and only if no output was produced: every priced count, reasoning, the cache-write total, and every fee count is 0 or absent (error_response). Billed partial output is never recorded as 0.",
       "if": {
         "properties": {
           "computed_cost": {"properties": {"basis": {"const": "upstream_error"}}, "required": ["basis"]}
@@ -481,6 +481,24 @@
                 ]
               },
               "output": {
+                "anyOf": [
+                  {"properties": {"value": {"const": 0}}, "required": ["value"]},
+                  {
+                    "properties": {"unavailable_reason": {"enum": ["error_response", "not_applicable"]}},
+                    "required": ["unavailable_reason"]
+                  }
+                ]
+              },
+              "reasoning": {
+                "anyOf": [
+                  {"properties": {"value": {"const": 0}}, "required": ["value"]},
+                  {
+                    "properties": {"unavailable_reason": {"enum": ["error_response", "not_applicable"]}},
+                    "required": ["unavailable_reason"]
+                  }
+                ]
+              },
+              "cache_write_total": {
                 "anyOf": [
                   {"properties": {"value": {"const": 0}}, "required": ["value"]},
                   {
@@ -608,7 +626,16 @@
           {
             "properties": {
               "fees": {
-                "contains": {"properties": {"count": {"properties": {"evidence": {"const": "unavailable"}}}}}
+                "contains": {
+                  "properties": {
+                    "count": {
+                      "properties": {
+                        "unavailable_reason": {"enum": ["not_reported", "stream_interrupted", "no_response"]}
+                      },
+                      "required": ["unavailable_reason"]
+                    }
+                  }
+                }
               }
             }
           }
@@ -657,7 +684,10 @@
                   "required": ["unavailable_reason"]
                 }
               },
-              "cache_write_unspecified": {"properties": {"value": {"type": "null"}}}
+              "cache_write_unspecified": {
+                "properties": {"value": {"type": "null"}, "unavailable_reason": {"const": "not_applicable"}},
+                "required": ["unavailable_reason"]
+              }
             }
           }
         }

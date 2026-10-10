@@ -325,8 +325,9 @@
       "properties": {
         "tokenizer_id": {"$ref": "urn:purser:contracts:common:0.1.0#/$defs/id"},
         "k": {
-          "description": "Tokens per UTF-8 byte, an exact decimal.",
-          "$ref": "urn:purser:contracts:common:0.1.0#/$defs/decimal"
+          "description": "Tokens per UTF-8 byte, an exact decimal greater than 0; a zero k would bound input by the overhead alone (B1).",
+          "$ref": "urn:purser:contracts:common:0.1.0#/$defs/decimal",
+          "not": {"pattern": "^0([.]0{1,18})?(?!\\n)$"}
         },
         "per_message_overhead_tokens": {"type": "integer", "minimum": 0, "maximum": 1000000},
         "certification": {

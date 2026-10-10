@@ -79,7 +79,8 @@ These hold in every schema. [ADR 0004](../docs/adr/0004-contract-conventions.md)
   or by ceiling charge, so billed partial output is never recorded as 0.
 - **Patterns mean the same everywhere.** Patterns start with `^`, end with `(?!\n)$` (in Python, `$`
   alone also matches before a trailing newline), and avoid `\d`, `\w`, `\s`, and bare `.`, which
-  differ between Python's `re` and ECMA-262.
+  differ between Python's `re` and ECMA-262. The lookahead needs an engine that supports it: RE2 (Go's
+  `regexp`, Rust's `regex`) does not.
 - **Denials carry the attempt ID natively.** The Anthropic body's `request_id` and the `request-id` or
   `x-request-id` header equal `purser-attempt-id`, the ID `explain_denial` takes (§7.8).
 

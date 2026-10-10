@@ -24,6 +24,11 @@
     "keyword": "parse:float",
     "why": "k is an exact decimal string; a float bound could round below the true count (7.3, B1)."
   },
+  "input-bound-k-zero.json": {
+    "path": "/entries/0/input_bound/k",
+    "keyword": "not",
+    "why": "A zero k would bound input by the per-message overhead alone, so the ceiling could fall below the true maximum (7.3, B1)."
+  },
   "negative-multiplier.json": {
     "path": "/entries/0/rules/1/values/1/multiplier",
     "keyword": "pattern",

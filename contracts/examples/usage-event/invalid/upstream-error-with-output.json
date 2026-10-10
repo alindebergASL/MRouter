@@ -94,7 +94,7 @@
     "reasoning": {
       "value": null,
       "evidence": "unavailable",
-      "unavailable_reason": "not_reported"
+      "unavailable_reason": "error_response"
     },
     "cache_write_total": {
       "value": null,

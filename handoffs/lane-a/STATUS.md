@@ -1,6 +1,6 @@
 # Lane A: Spec and proof — STATUS
 
-Updated: 2026-10-10 by the Lane A Phase 0 task 2 session (contracts v0)
+Updated: 2026-10-10 by the Lane A Phase 0 task 2 session (contracts v0, after two review rounds)
 Scope: contracts/, acceptance tests, the certification lab, the Compose dev stack, CI (build plan §5).
 
 ## Done
@@ -26,6 +26,9 @@ Scope: contracts/, acceptance tests, the certification lab, the Compose dev stac
   - ADR 0004 (contract conventions), proposed.
 
 ## Next
+0. Merge order: the task 2 PR depends on spec draft 0.6 (PR #5, branch `claude/nifty-wright-gjpgdu`) for
+   `purser_budget_policy_missing` (B5 extended) and the attempt's `org_id` (sections 4 and 7.6). Merge it with
+   or after that PR.
 1. Resolve the open questions listed in the task 2 PR. They decide:
    - two attempt transitions;
    - the evidence tier of ceiling charges;

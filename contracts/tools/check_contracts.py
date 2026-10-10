@@ -898,9 +898,10 @@ def check_pricing_fixtures(
             costs = [Decimal(c["cost_usd"]) for c in expected.get("classes", {}).values()]
             costs += [Decimal(f["cost_usd"]) for f in expected.get("fees", [])]
             total = Decimal(expected["total_usd"])
-            if sum(costs, Decimal(0)) != total:
-                failures.add(rel(path), f"class and fee costs sum to {sum(costs, Decimal(0))}, not total_usd {total}")
-            nd = (total * 10**9).quantize(Decimal(1), rounding=ROUND_HALF_UP)
+            summed = _exact(lambda: sum(costs, Decimal(0)))
+            if summed != total:
+                failures.add(rel(path), f"class and fee costs sum to {summed}, not total_usd {total}")
+            nd = _exact(lambda: total.scaleb(9)).quantize(Decimal(1), rounding=ROUND_HALF_UP)
             if nd != expected["total_nanodollars"]:
                 failures.add(rel(path), f"total_usd {total} rounds to {nd} nd, not {expected['total_nanodollars']}")
         if doc.get("fixture_id") == ANCHOR_FIXTURE[0]:

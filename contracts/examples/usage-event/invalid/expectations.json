@@ -2,7 +2,13 @@
   "anthropic-unspecified-cache-write.json": {
     "path": "/tokens/cache_write_unspecified/value",
     "keyword": "type",
-    "why": "Anthropic cache writes always carry a TTL (6.2), so a TTL-less count would be priced under the wrong rule."
+    "why": "Anthropic cache writes always carry a TTL (6.2), so a TTL-less count would be priced under the wrong rule.",
+    "also": [
+      {
+        "path": "/tokens/cache_write_unspecified",
+        "keyword": "required"
+      }
+    ]
   },
   "billed-cost-on-unknown-attempt.json": {
     "path": "/provider_billed_cost/evidence",
@@ -124,6 +130,11 @@
     "path": "/tokens/output",
     "keyword": "anyOf",
     "why": "An error after output began may be billed: it settles from partial stream usage or by ceiling charge, never as 0 (7.5)."
+  },
+  "upstream-error-with-reasoning.json": {
+    "path": "/tokens/reasoning",
+    "keyword": "anyOf",
+    "why": "Reasoning tokens are billed as output (6.2); an error that produced them is not free."
   },
   "usage-cost-on-interrupted-count.json": {
     "path": "/tokens/output/unavailable_reason",

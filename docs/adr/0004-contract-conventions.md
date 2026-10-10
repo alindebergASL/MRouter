@@ -45,7 +45,10 @@ counts as 0.
 ## Consequences
 
 - A float, a silent zero, or a free-text field in a contract fails CI rather than review.
-- Every pattern ends in `(?!\n)$`, because in Python `$` alone also matches before a trailing newline.
+- Every pattern ends in `(?!\n)$`, because in Python `$` alone also matches before a trailing newline. The
+  lookahead is ECMA-262 and Python, but not RE2: Go's standard `regexp` and Rust's `regex` crate cannot
+  compile it, so a data-plane validator in either needs a regex engine with lookahead (for example
+  regexp2 in Go or fancy-regex in Rust). The bake-off (spec 10) should check its candidate's validator.
 - An identifier format can still carry a short token such as `ignore_previous_instructions` or base64.
   The lint stops prose and whitespace, not encoding. It also means the allowlisted formats in
   `common.schema.json` deserve review whenever one changes.
