@@ -125,6 +125,12 @@ def test_missing_required_claim(
     assert reason(verifier, token) in {"missing_claim", "wrong_audience"}
 
 
+def test_a_token_without_typ_is_not_an_access_token(
+    verifier: OIDCVerifier, local_issuer: LocalIssuer
+) -> None:
+    assert reason(verifier, local_issuer.mint(uuid.uuid4(), typ=None)) == "not_an_access_token"
+
+
 def test_id_token_is_not_an_access_token(verifier: OIDCVerifier, local_issuer: LocalIssuer) -> None:
     assert reason(verifier, local_issuer.mint(uuid.uuid4(), typ="ID")) == "not_an_access_token"
 
@@ -172,3 +178,59 @@ def test_settings_refuse_symmetric_or_none_algorithms(algorithms: list[str]) -> 
         Settings(
             db_url="postgresql://x", oidc_issuer="https://i.example", oidc_algorithms=algorithms
         )
+
+
+def test_jwks_must_come_from_the_discovery_origin(local_issuer: LocalIssuer) -> None:
+    from pytest_httpserver import HTTPServer
+
+    from tests.conftest import _json_response
+
+    rogue = HTTPServer(host="127.0.0.1", port=0)
+    rogue.start()
+    try:
+        rogue.expect_request("/discovery").respond_with_handler(
+            lambda _: _json_response(
+                {
+                    "issuer": local_issuer.issuer,
+                    "jwks_uri": local_issuer.server.url_for(
+                        "/realms/local/protocol/openid-connect/certs"
+                    ),
+                }
+            )
+        )
+        v = OIDCVerifier(
+            settings_for(local_issuer.issuer, oidc_discovery_url=rogue.url_for("/discovery"))
+        )
+        with pytest.raises(AuthUnavailableError, match="origin"):
+            v.load()
+    finally:
+        rogue.stop()
+
+
+def test_failed_discovery_is_not_retried_on_every_request() -> None:
+    v = OIDCVerifier(
+        settings_for("http://127.0.0.1:9/realms/nowhere", oidc_http_timeout_seconds=0.5)
+    )
+    with pytest.raises(AuthUnavailableError, match="discovery unavailable"):
+        v.load()
+    started = time.monotonic()
+    for _ in range(20):
+        with pytest.raises(AuthUnavailableError, match="recently failed"):
+            v.verify("a.b.c")
+    assert time.monotonic() - started < 0.5
+
+
+@pytest.mark.parametrize("field", ["oidc_issuer", "oidc_discovery_url", "keycloak_url"])
+def test_production_requires_https(field: str) -> None:
+    https = "https://id.example/realms/purser"
+    values = {
+        "env": "prod",
+        "db_url": "postgresql://x",
+        "oidc_issuer": https,
+        "oidc_discovery_url": https,
+        "keycloak_url": https,
+        field: "http://id.example/realms/purser",
+    }
+    with pytest.raises(ValueError, match=f"{field} must be https"):
+        Settings(**values)
+    Settings(**{**values, field: "https://id.example/realms/purser"})

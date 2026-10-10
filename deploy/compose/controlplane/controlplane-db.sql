@@ -9,8 +9,9 @@
 --                      bootstrap CLI. Not used by the API.
 --   purser_cp_app      the API's login role: not an owner, NOBYPASSRLS, so every
 --                      org-scoped query passes the row-level security policies.
---   purser_cp_sweeper  the pending-row sweeper's login role: NOBYPASSRLS; its
---                      policies see pending rows only.
+--   purser_cp_sweeper  the pending-row sweeper's login role: NOBYPASSRLS; reads
+--                      identifiers only (column grants) and changes or deletes
+--                      pending rows only.
 
 DO $$
 BEGIN

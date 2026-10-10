@@ -116,6 +116,13 @@ class KeycloakAdmin:
         return uuid.UUID(location.rstrip("/").rsplit("/", 1)[-1])
 
     @staticmethod
+    def _single(matches: list[dict[str, Any]]) -> uuid.UUID | None:
+        """None if absent; an error if ambiguous, so callers skip rather than act."""
+        if len(matches) > 1:
+            raise KeycloakError("more than one object carries this purser_id")
+        return uuid.UUID(matches[0]["id"]) if matches else None
+
+    @staticmethod
     def _has_purser_id(obj: dict[str, Any], purser_id: uuid.UUID) -> bool:
         return (obj.get("attributes") or {}).get(PURSER_ID) == [str(purser_id)]
 
@@ -127,8 +134,7 @@ class KeycloakAdmin:
             "/organizations",
             params={"q": f"{PURSER_ID}:{purser_id}", "briefRepresentation": "false", "max": "2"},
         )
-        matches = [o for o in response.json() if self._has_purser_id(o, purser_id)]
-        return uuid.UUID(matches[0]["id"]) if len(matches) == 1 else None
+        return self._single([o for o in response.json() if self._has_purser_id(o, purser_id)])
 
     def create_org(self, purser_id: uuid.UUID) -> uuid.UUID:
         """Create the organization for our org row, or return the one already made."""
@@ -155,6 +161,10 @@ class KeycloakAdmin:
         except KeycloakConflictError:
             return  # already a member
 
+    def delete_org(self, keycloak_org_id: uuid.UUID) -> None:
+        """Used only by the sweeper to roll back an org whose rows it deletes."""
+        self._request("DELETE", f"/organizations/{keycloak_org_id}")
+
     # -- users ---------------------------------------------------------------
 
     def find_user(self, purser_id: uuid.UUID) -> uuid.UUID | None:
@@ -163,8 +173,7 @@ class KeycloakAdmin:
             "/users",
             params={"q": f"{PURSER_ID}:{purser_id}", "briefRepresentation": "false", "max": "2"},
         )
-        matches = [u for u in response.json() if self._has_purser_id(u, purser_id)]
-        return uuid.UUID(matches[0]["id"]) if len(matches) == 1 else None
+        return self._single([u for u in response.json() if self._has_purser_id(u, purser_id)])
 
     def email_taken_by_other(self, email: str, purser_id: uuid.UUID) -> bool:
         """Whether a Keycloak user with this email exists that we didn't create for purser_id."""
@@ -198,6 +207,10 @@ class KeycloakAdmin:
             },
         )
         return self._created_id(response)
+
+    def delete_user(self, keycloak_user_id: uuid.UUID) -> None:
+        """Used only by the sweeper to roll back a user whose row it deletes."""
+        self._request("DELETE", f"/users/{keycloak_user_id}")
 
     def second_factor_configured(self, keycloak_user_id: uuid.UUID) -> bool:
         response = self._request("GET", f"/users/{keycloak_user_id}/credentials")

@@ -40,7 +40,7 @@ def test_upgrade_downgrade_upgrade() -> None:
             "platform_operators",
             "audit_events",
         } <= tables
-        assert functions == {"current_org_id", "current_operator_is_valid"}
+        assert functions == {"current_org_id", "current_operator_is_valid", "is_operator"}
 
         migrate_to(db, "base")
         tables, functions = _objects(db.owner_url)

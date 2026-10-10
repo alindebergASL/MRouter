@@ -1,11 +1,18 @@
 """Finish or roll back rows left pending by a failed Keycloak call (ADR 0003).
 
-Runs as its own database role, which sees only pending orgs and users (and
-every org's Keycloak link), through narrow column grants. For each pending row
-older than the threshold it looks up the Keycloak object carrying the row's
-purser_id: if there is one, it links the row and marks it active; if not, it
-deletes the row (its children cascade). Pending orgs go first, so a pending
-user's org is settled before the user is.
+Runs as its own database role, which reads identifiers only (no names or
+emails, by column grants) and can change or delete only pending rows. For
+each pending row older than the threshold it looks up the Keycloak objects
+carrying the row's purser_id:
+
+- A pending org and its pending first owner settle together, so an org is
+  never active without an owner: if Keycloak has both, both become active
+  (and the owner joins the organization); otherwise both rows are deleted
+  (children cascade), along with whichever of the two Keycloak objects exist.
+- A pending user in an active org becomes active if Keycloak has the
+  identity (and joins the organization), and is deleted otherwise.
+
+An ambiguous lookup (two objects with one purser_id) skips the row.
 """
 
 import logging
@@ -47,12 +54,48 @@ def sweep_once(
             .all()
         )
         for org_id in pending_orgs:
+            owner_ids = (
+                session.execute(
+                    select(User.id).where(User.org_id == org_id, User.status == UserStatus.PENDING)
+                )
+                .scalars()
+                .all()
+            )
             try:
                 keycloak_org_id = keycloak.find_org(org_id)
+                keycloak_users = {user_id: keycloak.find_user(user_id) for user_id in owner_ids}
+                complete = (
+                    keycloak_org_id is not None
+                    and bool(keycloak_users)
+                    and None not in keycloak_users.values()
+                )
+                if complete:
+                    assert keycloak_org_id is not None
+                    for keycloak_user_id in keycloak_users.values():
+                        assert keycloak_user_id is not None
+                        keycloak.add_member(keycloak_org_id, keycloak_user_id)
+                else:
+                    # Roll back Keycloak's half first: if this fails, the rows
+                    # stay pending and the next sweep tries again.
+                    for keycloak_user_id in keycloak_users.values():
+                        if keycloak_user_id is not None:
+                            keycloak.delete_user(keycloak_user_id)
+                    if keycloak_org_id is not None:
+                        keycloak.delete_org(keycloak_org_id)
             except KeycloakError:
                 result.skipped.append(org_id)
                 continue
-            if keycloak_org_id is not None:
+            if complete:
+                for user_id, keycloak_user_id in keycloak_users.items():
+                    session.execute(
+                        update(User)
+                        .where(User.id == user_id, User.status == UserStatus.PENDING)
+                        .values(
+                            keycloak_sub=keycloak_user_id,
+                            status=UserStatus.ACTIVE,
+                            updated_at=func.now(),
+                        )
+                    )
                 session.execute(
                     update(Org)
                     .where(Org.id == org_id, Org.status == OrgStatus.PENDING)
@@ -63,13 +106,13 @@ def sweep_once(
                     )
                 )
                 action = "org.sweep.finish"
-                result.finished.append(org_id)
+                result.finished.extend([org_id, *owner_ids])
             else:
                 session.execute(
                     delete(Org).where(Org.id == org_id, Org.status == OrgStatus.PENDING)
                 )
                 action = "org.sweep.rollback"
-                result.rolled_back.append(org_id)
+                result.rolled_back.extend([org_id, *owner_ids])
             audit.record(
                 session,
                 actor_kind="system",
@@ -79,7 +122,14 @@ def sweep_once(
                 target_id=org_id,
                 org_id=org_id,
             )
-            session.commit()
+            try:
+                session.commit()
+            except IntegrityError:
+                session.rollback()
+                log.warning(
+                    "pending org conflicts with an existing link", extra={"org_id": str(org_id)}
+                )
+                result.skipped.append(org_id)
 
         pending_users = session.execute(
             select(User.id, User.org_id)

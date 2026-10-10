@@ -6,9 +6,9 @@ Manager through the task's IAM role; never baked into the image (D2).
 """
 
 from functools import lru_cache
-from typing import Literal
+from typing import Literal, Self
 
-from pydantic import Field, SecretStr, field_validator
+from pydantic import Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # Asymmetric algorithms only. "none" and every HMAC algorithm are rejected
@@ -52,7 +52,8 @@ class Settings(BaseSettings):
     keycloak_timeout_seconds: float = Field(default=10.0, gt=0)
 
     # Pending-row sweeper.
-    sweep_after_seconds: int = Field(default=300, ge=0)
+    # At least a minute, so the sweeper never races a request still provisioning.
+    sweep_after_seconds: int = Field(default=300, ge=60)
     sweep_interval_seconds: int = Field(default=60, ge=1)
 
     @field_validator("oidc_algorithms")
@@ -64,6 +65,17 @@ class Settings(BaseSettings):
                 f"oidc_algorithms must be a non-empty subset of {sorted(ALLOWED_ALGORITHMS)}"
             )
         return v
+
+    @model_validator(mode="after")
+    def _https_in_prod(self) -> Self:
+        # Anyone who can intercept the key fetch can forge any token, and the
+        # Keycloak client secret travels on keycloak_url: TLS outside dev.
+        if self.env == "prod":
+            for name in ("oidc_issuer", "oidc_discovery_url", "keycloak_url"):
+                value = getattr(self, name)
+                if value is not None and not value.startswith("https://"):
+                    raise ValueError(f"{name} must be https:// when PURSER_ENV=prod")
+        return self
 
     @property
     def discovery_url(self) -> str:

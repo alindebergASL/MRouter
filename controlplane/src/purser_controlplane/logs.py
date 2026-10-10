@@ -22,3 +22,7 @@ def configure(level: int = logging.INFO) -> None:
     root = logging.getLogger()
     root.handlers[:] = [handler]
     root.setLevel(level)
+    # httpx logs every request URL at INFO, and admin-API URLs can carry an
+    # email (a lookup by address). Keep HTTP client logs to warnings.
+    for name in ("httpx", "httpcore", "urllib3"):
+        logging.getLogger(name).setLevel(logging.WARNING)

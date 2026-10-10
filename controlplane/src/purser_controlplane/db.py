@@ -15,9 +15,9 @@ in the middle of a request doesn't drop it.
 import uuid
 from collections.abc import Iterator
 from contextlib import contextmanager
-from typing import Any
+from typing import Any, cast
 
-from sqlalchemy import Connection, Engine, create_engine, event, text
+from sqlalchemy import Connection, CursorResult, Engine, Executable, create_engine, event, text
 from sqlalchemy.orm import Session, SessionTransaction, sessionmaker
 
 ORG_KEY = "purser.org_id"
@@ -73,6 +73,11 @@ class Database:
 
     def dispose(self) -> None:
         self.engine.dispose()
+
+
+def affected(session: Session, statement: Executable) -> int:
+    """Run an UPDATE or DELETE and return how many rows it changed."""
+    return cast("CursorResult[Any]", session.execute(statement)).rowcount
 
 
 def set_context(

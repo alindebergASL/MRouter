@@ -180,6 +180,40 @@ def test_a_failed_keycloak_step_leaves_pending_rows_the_sweeper_finishes(
     assert [m["id"] for m in members] == [str(owner_row["keycloak_sub"])]
 
 
+class _FailingUserCreation(KeycloakAdmin):
+    """Keycloak that creates the organization but fails to create the owner (step 2)."""
+
+    def create_user(self, purser_id: uuid.UUID, email: str, display_name: str) -> uuid.UUID:
+        raise KeycloakError("injected failure")
+
+
+def test_an_org_without_its_owner_is_rolled_back_whole(
+    local_issuer: LocalIssuer, seeded: TestDatabase, owner_engine: Any, keycloak: KeycloakAdmin
+) -> None:
+    failing = _FailingUserCreation(
+        os.environ["PURSER_KEYCLOAK_URL"],
+        os.environ["PURSER_KEYCLOAK_REALM"],
+        os.environ["PURSER_KEYCLOAK_CLIENT_ID"],
+        os.environ["PURSER_KEYCLOAK_CLIENT_SECRET"],
+        10,
+    )
+    api = _app(local_issuer, seeded, failing)
+    response = api.post(
+        "/v1/orgs",
+        json={"name": "No Owner Co", "owner_email": _email(), "owner_display_name": "N"},
+        headers=_operator(local_issuer),
+    )
+    assert response.status_code == 202
+    org_id = uuid.UUID(response.json()["org"]["id"])
+    assert keycloak.find_org(org_id) is not None  # step 1 happened
+
+    result = sweep_once(Database(seeded.sweeper_url, pool_size=1), keycloak, older_than_seconds=0)
+    assert org_id in result.rolled_back
+    # Never an active org without an owner: the rows and Keycloak's organization are gone.
+    assert _row(owner_engine, "orgs", str(org_id)) is None
+    assert keycloak.find_org(org_id) is None
+
+
 def test_the_sweeper_rolls_back_rows_keycloak_never_saw(
     seeded: TestDatabase, owner_engine: Any, keycloak: KeycloakAdmin
 ) -> None:
@@ -224,9 +258,19 @@ def test_org_admin_creates_a_user(
     owner_engine: Any,
     keycloak: KeycloakAdmin,
     created: list[Any],
+    caplog: pytest.LogCaptureFixture,
 ) -> None:
+    import logging
+
+    from purser_controlplane import logs
     from purser_controlplane.seed import ACME_KEYCLOAK_ORG_ID, ACME_ORG_ID
     from tests.integration.helpers import make_member
+
+    # The service's own logging setup (which quiets httpx), with pytest's
+    # capture handler put back on the root logger it replaces.
+    logs.configure(logging.DEBUG)
+    logging.getLogger().addHandler(caplog.handler)
+    assert logging.getLogger("httpx").getEffectiveLevel() >= logging.WARNING
 
     acme = OrgFixture(ACME_ORG_ID, ACME_KEYCLOAK_ORG_ID, uuid.uuid4(), uuid.uuid4())
     admin = make_member(owner_engine, acme, Role.ADMIN)
@@ -234,15 +278,19 @@ def test_org_admin_creates_a_user(
     headers = {
         "Authorization": f"Bearer {local_issuer.mint(admin.sub, orgs={'acme-dev': ACME_KEYCLOAK_ORG_ID})}"
     }
+    email = _email()
     response = api.post(
         f"/v1/orgs/{ACME_ORG_ID}/users",
-        json={"email": _email(), "display_name": "New"},
+        json={"email": email, "display_name": "New"},
         headers=headers,
     )
     assert response.status_code == 201, response.text
     user = _row(owner_engine, "users", response.json()["id"])
     assert user and user["status"] == "active"
     created.append(("users", user["keycloak_sub"]))
+    # The address went to Keycloak, but never into a log line.
+    assert caplog.records, "capture is working (the request logged something)"
+    assert email.split("@")[0] not in caplog.text
     members = {
         m["id"]
         for m in keycloak._request("GET", f"/organizations/{ACME_KEYCLOAK_ORG_ID}/members").json()

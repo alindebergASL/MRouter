@@ -4,7 +4,7 @@
 # (deploy/compose/cloud.override.yaml). Elsewhere the file doesn't exist.
 EGRESS_CA := $(wildcard /root/.ccr/ca-bundle.crt)
 COMPOSE := docker compose -f deploy/compose/dev.yaml $(if $(EGRESS_CA),-f deploy/compose/cloud.override.yaml)
-SHELL_SCRIPTS := $(wildcard scripts/*.sh .claude/hooks/*.sh)
+SHELL_SCRIPTS := $(wildcard scripts/*.sh .claude/hooks/*.sh controlplane/scripts/*.sh)
 
 .DEFAULT_GOAL := help
 .PHONY: help dev-up dev-down dev-reset dev-ps dev-logs dev-psql dev-check dev-token \
@@ -72,9 +72,16 @@ CP_IMAGE ?= purser-controlplane:dev
 # A variable, because the comma would split $(if ...)'s arguments.
 CA_BUILD_SECRET := --secret id=egress-ca,src=$(EGRESS_CA)
 
+# With PURSER_BUILD_CANARY set, the canary is also planted as files in the build
+# context, inside the package and next to it, as a secret might be; the D2 check
+# then proves none of it reached a layer.
+CANARY_FILES := controlplane/src/purser_controlplane/.env.canary controlplane/.env.canary
+
 cp-image: ## Control plane: build the image (deploy/images/controlplane/Dockerfile)
+	@if [ -n "$${PURSER_BUILD_CANARY:-}" ]; then \
+	  for f in $(CANARY_FILES); do printf '%s\n' "$$PURSER_BUILD_CANARY" > "$$f"; done; fi
 	docker build -f deploy/images/controlplane/Dockerfile -t $(CP_IMAGE) \
-	  $(if $(EGRESS_CA),$(CA_BUILD_SECRET)) .
+	  $(if $(EGRESS_CA),$(CA_BUILD_SECRET)) . ; status=$$?; rm -f $(CANARY_FILES); exit $$status
 
 cp-image-check: ## Control plane: D2 checks on the built image (needs make dev-up)
 	scripts/check-image-d2.sh $(CP_IMAGE) "$${PURSER_BUILD_CANARY:-}"

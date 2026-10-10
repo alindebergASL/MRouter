@@ -284,6 +284,7 @@ def downgrade() -> None:
     # After the tables: their policies depend on these functions.
     op.execute(f"DROP FUNCTION {S}.current_org_id()")
     op.execute(f"DROP FUNCTION {S}.current_operator_is_valid()")
+    op.execute(f"DROP FUNCTION {S}.is_operator(uuid)")
 
 
 ORG_SCOPED = {
@@ -302,10 +303,17 @@ def _row_level_security() -> None:
 
     The API's role sees a row only when the transaction has set purser.org_id
     to that row's org (with set_config(..., true), i.e. SET LOCAL), or, for the
-    few operator policies, when purser.operator_sub names a row in
-    platform_operators. With neither set, it sees nothing. The owner role is
-    not subject to these policies (RLS is enabled, not forced) and runs only
-    migrations and the bootstrap CLI.
+    few operator policies, when purser.operator_sub names a platform operator.
+    With neither set, it sees nothing. The owner role is not subject to these
+    policies (RLS is enabled, not forced) and runs only migrations and the
+    bootstrap CLI.
+
+    What this layer stops: an API code path that forgets its org filter, or
+    reads or writes the wrong org's rows, as in the tests. What it can't stop:
+    SQL injected into the API's own role, which could set these settings
+    itself. The API role can't read platform_operators (it asks
+    is_operator(sub) instead), so it can't list the subjects that unlock the
+    operator policies.
     """
     app, sweeper = f'"{APP_ROLE}"', f'"{SWEEPER_ROLE}"'
 
@@ -314,20 +322,28 @@ def _row_level_security() -> None:
         LANGUAGE sql STABLE SECURITY INVOKER SET search_path = pg_catalog AS
         $$ SELECT nullif(current_setting('purser.org_id', true), '')::uuid $$
     """)
+    # SECURITY DEFINER (owned by the owner role) so the API role can test one
+    # subject without being able to read the table. search_path is pinned and
+    # every name is schema-qualified.
+    op.execute(f"""
+        CREATE FUNCTION {S}.is_operator(sub uuid) RETURNS boolean
+        LANGUAGE sql STABLE SECURITY DEFINER SET search_path = pg_catalog AS
+        $$ SELECT EXISTS (SELECT 1 FROM {S}.platform_operators WHERE keycloak_sub = sub) $$
+    """)
     op.execute(f"""
         CREATE FUNCTION {S}.current_operator_is_valid() RETURNS boolean
-        LANGUAGE sql STABLE SECURITY INVOKER SET search_path = pg_catalog AS
+        LANGUAGE sql STABLE SECURITY DEFINER SET search_path = pg_catalog AS
         $$ SELECT EXISTS (
              SELECT 1 FROM {S}.platform_operators
              WHERE keycloak_sub::text = nullif(current_setting('purser.operator_sub', true), '')
            ) $$
     """)
-    op.execute(f"REVOKE ALL ON FUNCTION {S}.current_org_id() FROM PUBLIC")
-    op.execute(f"REVOKE ALL ON FUNCTION {S}.current_operator_is_valid() FROM PUBLIC")
-    op.execute(f"GRANT EXECUTE ON FUNCTION {S}.current_org_id() TO {app}")
-    op.execute(f"GRANT EXECUTE ON FUNCTION {S}.current_operator_is_valid() TO {app}")
+    for function in ("current_org_id()", "is_operator(uuid)", "current_operator_is_valid()"):
+        op.execute(f"REVOKE ALL ON FUNCTION {S}.{function} FROM PUBLIC")
+        op.execute(f"GRANT EXECUTE ON FUNCTION {S}.{function} TO {app}")
 
-    # Least privilege: the API never deletes; the sweeper sees pending rows only.
+    # Least privilege: the API never deletes and can't read platform_operators;
+    # the sweeper reads identifiers only and changes only pending rows.
     grants = {
         "orgs": "SELECT, INSERT, UPDATE",
         "workspaces": "SELECT, INSERT",
@@ -335,7 +351,6 @@ def _row_level_security() -> None:
         "users": "SELECT, INSERT, UPDATE",
         "memberships": "SELECT, INSERT",
         "audit_events": "INSERT",
-        "platform_operators": "SELECT",
     }
     for table, privileges in grants.items():
         op.execute(f"GRANT {privileges} ON {S}.{table} TO {app}")

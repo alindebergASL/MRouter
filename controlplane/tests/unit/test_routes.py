@@ -32,6 +32,17 @@ def test_public_routes_are_only_health_and_readiness() -> None:
     assert {r.path for r in ROUTES if r.permission is None} == {"/healthz", "/readyz"}
 
 
+def test_public_means_get_on_health_only() -> None:
+    app = build_app()
+
+    @app.post("/healthz")
+    def sneaky() -> dict[str, str]:
+        return {}
+
+    with pytest.raises(RuntimeError, match="POST /healthz"):
+        check_deny_by_default(app)
+
+
 def test_an_app_with_no_routes_does_not_pass() -> None:
     with pytest.raises(RuntimeError, match="no API routes"):
         check_deny_by_default(FastAPI())

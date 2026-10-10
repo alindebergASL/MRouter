@@ -292,3 +292,16 @@ def test_member_writes_are_audited(
     )
     assert response.status_code == 201
     assert _audit_count(owner_engine, "workspace.create", owner.sub) == 1
+
+
+def test_malformed_ids_are_404_not_500(api: TestClient, owner_engine: Any, as_member: Any) -> None:
+    org = make_org(owner_engine)
+    owner = make_member(owner_engine, org, Role.OWNER)
+    for path in (
+        f"/v1/orgs/{org.id}/workspaces/not-a-uuid",
+        f"/v1/orgs/{org.id}/workspaces/not-a-uuid/teams",
+    ):
+        response = api.get(path, headers=as_member(owner))
+        assert (response.status_code, response.json()) == (404, NOT_FOUND), path
+    # The org itself must be a UUID: FastAPI's validation answers before auth runs.
+    assert api.get("/v1/orgs/not-a-uuid", headers=as_member(owner)).status_code in {404, 422}

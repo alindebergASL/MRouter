@@ -8,8 +8,14 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from sqlalchemy import func, select, update
 
 from purser_controlplane import audit
-from purser_controlplane.api.deps import KeycloakDep, OperatorContext, require_operator
+from purser_controlplane.api.deps import (
+    KeycloakDep,
+    OperatorContext,
+    RolledBackError,
+    require_operator,
+)
 from purser_controlplane.api.pagination import page
+from purser_controlplane.db import affected
 from purser_controlplane.keycloak import KeycloakError
 from purser_controlplane.models import Membership, Org, OrgStatus, Role, ScopeType, User, UserStatus
 from purser_controlplane.schemas import OrgCreate, OrgCreated, OrgOut, Page, UserOut
@@ -87,18 +93,30 @@ def create_org(
         keycloak_org_id = keycloak.create_org(org_id)
         keycloak_user_id = keycloak.create_user(owner_id, email, body.owner_display_name)
         keycloak.add_member(keycloak_org_id, keycloak_user_id)
-        session.execute(
+        activated = affected(
+            session,
             update(Org)
             .where(Org.id == org_id, Org.status == OrgStatus.PENDING)
-            .values(keycloak_org_id=keycloak_org_id, status=OrgStatus.ACTIVE, updated_at=func.now())
+            .values(
+                keycloak_org_id=keycloak_org_id, status=OrgStatus.ACTIVE, updated_at=func.now()
+            ),
         )
-        session.execute(
+        activated += affected(
+            session,
             update(User)
             .where(User.id == owner_id, User.status == UserStatus.PENDING)
-            .values(keycloak_sub=keycloak_user_id, status=UserStatus.ACTIVE, updated_at=func.now())
+            .values(keycloak_sub=keycloak_user_id, status=UserStatus.ACTIVE, updated_at=func.now()),
         )
+        if activated != 2:
+            raise RolledBackError
         session.commit()
         org.status, owner.status = OrgStatus.ACTIVE, UserStatus.ACTIVE
+    except RolledBackError:
+        session.rollback()
+        log.warning("org was rolled back before activation", extra={"org_id": str(org_id)})
+        raise HTTPException(
+            status.HTTP_409_CONFLICT, "Provisioning was rolled back; retry"
+        ) from None
     except Exception:
         session.rollback()
         log.warning("org provisioning left pending", extra={"org_id": str(org_id)})

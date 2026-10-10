@@ -8,8 +8,9 @@
 #
 # Usage: scripts/check-image-d2.sh <image> [canary]
 #   Needs the dev stack (make dev-up) for the readiness check.
-#   canary: a string planted in the build environment that must not appear
-#   in any layer (CI passes one).
+#   canary: a string planted in the build context and environment before the
+#   build (make cp-image does both when PURSER_BUILD_CANARY is set) that must
+#   not appear in any layer.
 set -euo pipefail
 
 image=${1:?usage: $0 <image> [canary]}
@@ -82,7 +83,11 @@ docker save "$image" -o "$dir/image.tar"
 mkdir "$dir/x"
 tar -xf "$dir/image.tar" -C "$dir/x"
 patterns=()
-[ -n "$canary" ] && patterns+=("$canary")
+if [ -n "$canary" ]; then
+  # A short canary would match by chance and prove nothing.
+  [ "${#canary}" -ge 16 ] || fail "the canary must be at least 16 characters"
+  patterns+=("$canary")
+fi
 # In a cloud session, the egress interception CA (passed to the build as a
 # secret) must not have landed in a layer. Its PEM body is distinctive; the
 # names inside it are base64-encoded, so search for body lines, not names.
@@ -95,8 +100,10 @@ fi
 [ "${#patterns[@]}" -gt 0 ] || { echo "skip: no canary or CA to search for"; patterns=(); }
 for blob in "$dir"/x/blobs/sha256/*; do
   for pattern in ${patterns[@]+"${patterns[@]}"}; do
-    # Layers are tar or gzip-compressed tar; search both forms.
-    if { gzip -dc "$blob" 2>/dev/null || cat "$blob"; } | grep -aqF "$pattern"; then
+    # Layers are tar or gzip-compressed tar; search both forms. Not grep -q:
+    # it exits at the first match, the decompressor then dies of SIGPIPE, and
+    # under pipefail the pipeline reads as "not found".
+    if { gzip -dc "$blob" 2>/dev/null || cat "$blob"; } | grep -aF -- "$pattern" >/dev/null; then
       rm -rf "$dir"
       fail "found '$pattern' in layer $(basename "$blob")"
     fi

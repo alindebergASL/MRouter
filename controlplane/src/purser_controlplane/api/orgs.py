@@ -14,7 +14,7 @@ from sqlalchemy import func, select, update
 from sqlalchemy.exc import IntegrityError
 
 from purser_controlplane import audit
-from purser_controlplane.api.deps import KeycloakDep, OrgContext, require
+from purser_controlplane.api.deps import KeycloakDep, OrgContext, RolledBackError, require
 from purser_controlplane.api.pagination import page
 from purser_controlplane.authz import (
     OWNER_GRANTED_ROLES,
@@ -23,6 +23,7 @@ from purser_controlplane.authz import (
     visible_teams,
     visible_workspaces,
 )
+from purser_controlplane.db import affected
 from purser_controlplane.keycloak import KeycloakError
 from purser_controlplane.models import (
     Membership,
@@ -221,13 +222,22 @@ def create_user(
     try:
         keycloak_user_id = keycloak.create_user(user.id, email, body.display_name)
         keycloak.add_member(ctx.keycloak_org_id, keycloak_user_id)
-        session.execute(
+        activated = affected(
+            session,
             update(User)
             .where(User.id == user.id, User.status == UserStatus.PENDING)
-            .values(keycloak_sub=keycloak_user_id, status=UserStatus.ACTIVE, updated_at=func.now())
+            .values(keycloak_sub=keycloak_user_id, status=UserStatus.ACTIVE, updated_at=func.now()),
         )
+        if activated != 1:
+            raise RolledBackError
         session.commit()
         user.status = UserStatus.ACTIVE
+    except RolledBackError:
+        session.rollback()
+        log.warning("user was rolled back before activation", extra={"user_id": str(user.id)})
+        raise HTTPException(
+            status.HTTP_409_CONFLICT, "Provisioning was rolled back; retry"
+        ) from None
     except Exception:
         session.rollback()
         log.warning("user provisioning left pending", extra={"user_id": str(user.id)})

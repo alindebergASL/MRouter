@@ -19,6 +19,7 @@ import time
 import uuid
 from dataclasses import dataclass
 from typing import Any
+from urllib.parse import urlsplit
 
 import httpx
 import jwt
@@ -58,6 +59,23 @@ class _RateLimitedJWKClient(PyJWKClient):
         self._min_refresh = min_refresh_seconds
         self._last_forced_refresh = float("-inf")
         self._lock = threading.Lock()
+        self._http_timeout = timeout
+
+    def fetch_data(self) -> Any:
+        # PyJWT's own fetch uses urllib, which follows proxy environment
+        # variables; fetch the keys the way discovery is fetched, with none.
+        try:
+            with httpx.Client(timeout=self._http_timeout, trust_env=False) as client:
+                response = client.get(self.uri)
+                response.raise_for_status()
+                jwk_set = response.json()
+        except (httpx.HTTPError, ValueError) as exc:
+            raise PyJWKClientConnectionError("jwks fetch failed") from exc
+        if not isinstance(jwk_set, dict):
+            raise PyJWKClientError("jwks is not a JSON object")
+        if self.jwk_set_cache is not None:
+            self.jwk_set_cache.put(jwk_set)
+        return jwk_set
 
     def get_signing_key(self, kid: str) -> PyJWK:
         key = self.match_kid(self.get_signing_keys(), kid)
@@ -81,8 +99,13 @@ class OIDCVerifier:
         self._discovery_url = settings.discovery_url
         self._min_refresh = settings.oidc_jwks_min_refresh_seconds
         self._timeout = settings.oidc_http_timeout_seconds
+        self._require_https = settings.env == "prod"
         self._jwks: _RateLimitedJWKClient | None = None
         self._lock = threading.Lock()
+        # While the auth service is unreachable, retry discovery at most this
+        # often, so unauthenticated requests can't pile up blocking fetches.
+        self._load_retry_seconds = 5.0
+        self._last_failed_load = float("-inf")
 
     @property
     def ready(self) -> bool:
@@ -90,28 +113,44 @@ class OIDCVerifier:
 
     def load(self) -> None:
         """Fetch discovery, check its issuer, and prime the JWKS cache."""
+        if self._jwks is not None:
+            return
+        if time.monotonic() - self._last_failed_load < self._load_retry_seconds:
+            raise AuthUnavailableError("discovery recently failed")
         with self._lock:
+            if self._jwks is not None:
+                return
             try:
-                with httpx.Client(timeout=self._timeout, trust_env=False) as client:
-                    response = client.get(self._discovery_url)
-                    response.raise_for_status()
-                    document = response.json()
-            except (httpx.HTTPError, ValueError) as exc:
-                raise AuthUnavailableError("discovery unavailable") from exc
-            if document.get("issuer") != self._issuer:
-                # Never adopt an issuer from the network.
-                raise AuthUnavailableError("discovery issuer does not match the configured issuer")
-            jwks_uri = document.get("jwks_uri")
-            if not isinstance(jwks_uri, str) or not jwks_uri.startswith(("https://", "http://")):
-                raise AuthUnavailableError("discovery has no usable jwks_uri")
-            jwks = _RateLimitedJWKClient(
-                jwks_uri, min_refresh_seconds=self._min_refresh, timeout=self._timeout
-            )
-            try:
-                jwks.get_signing_keys()
-            except PyJWKClientError as exc:
-                raise AuthUnavailableError("jwks unavailable") from exc
-            self._jwks = jwks
+                self._load_locked()
+            except AuthUnavailableError:
+                self._last_failed_load = time.monotonic()
+                raise
+
+    def _load_locked(self) -> None:
+        try:
+            with httpx.Client(timeout=self._timeout, trust_env=False) as client:
+                response = client.get(self._discovery_url)
+                response.raise_for_status()
+                document = response.json()
+        except (httpx.HTTPError, ValueError) as exc:
+            raise AuthUnavailableError("discovery unavailable") from exc
+        if document.get("issuer") != self._issuer:
+            # Never adopt an issuer from the network.
+            raise AuthUnavailableError("discovery issuer does not match the configured issuer")
+        jwks_uri = document.get("jwks_uri")
+        if not isinstance(jwks_uri, str) or _origin(jwks_uri) != _origin(self._discovery_url):
+            # Keys come from where discovery came from, never elsewhere.
+            raise AuthUnavailableError("jwks_uri is not on the discovery document's origin")
+        if self._require_https and not jwks_uri.startswith("https://"):
+            raise AuthUnavailableError("jwks_uri is not https")
+        jwks = _RateLimitedJWKClient(
+            jwks_uri, min_refresh_seconds=self._min_refresh, timeout=self._timeout
+        )
+        try:
+            jwks.get_signing_keys()
+        except PyJWKClientError as exc:
+            raise AuthUnavailableError("jwks unavailable") from exc
+        self._jwks = jwks
 
     def verify(self, token: str) -> Principal:
         if not token or len(token) > MAX_TOKEN_BYTES:
@@ -169,7 +208,7 @@ class OIDCVerifier:
             raise TokenError("invalid") from exc
 
         # Keycloak marks access tokens typ=Bearer; ID and refresh tokens differ.
-        if claims.get("typ", "Bearer") != "Bearer":
+        if claims.get("typ") != "Bearer":
             raise TokenError("not_an_access_token")
         try:
             sub = uuid.UUID(str(claims["sub"]))
@@ -181,6 +220,11 @@ class OIDCVerifier:
             org_ids=_organization_ids(claims.get("organization")),
             acr=acr if isinstance(acr, str) else None,
         )
+
+
+def _origin(url: str) -> tuple[str, str, int | None]:
+    parts = urlsplit(url)
+    return parts.scheme, parts.hostname or "", parts.port
 
 
 def _organization_ids(claim: object) -> frozenset[uuid.UUID]:

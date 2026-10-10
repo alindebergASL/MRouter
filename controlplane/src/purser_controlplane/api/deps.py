@@ -1,7 +1,7 @@
 """Request dependencies: authentication, the RLS-scoped session, and authorization.
 
 Deny by default: every route must depend on require(...) or require_operator(),
-or be listed in PUBLIC_PATHS; app.create_app refuses to start otherwise.
+or be listed in PUBLIC_ROUTES; app.create_app refuses to start otherwise.
 
 Org access fails with one 404, whatever the reason (no such org, org pending,
 org not in the token's organization claim, no active user row for the
@@ -18,7 +18,7 @@ from typing import Annotated, Any
 
 from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
-from sqlalchemy import and_, select
+from sqlalchemy import and_, func, select
 from sqlalchemy.orm import Session
 
 from purser_controlplane.auth.oidc import AuthUnavailableError, OIDCVerifier, Principal, TokenError
@@ -29,7 +29,6 @@ from purser_controlplane.models import (
     Membership,
     Org,
     OrgStatus,
-    PlatformOperator,
     Role,
     ScopeType,
     User,
@@ -39,12 +38,18 @@ from purser_controlplane.settings import Settings
 
 log = logging.getLogger("purser.authz")
 
-PUBLIC_PATHS = frozenset({"/healthz", "/readyz"})
+# Public routes, by method and path: health and readiness only.
+PUBLIC_ROUTES = frozenset({("GET", "/healthz"), ("GET", "/readyz")})
+PUBLIC_PATHS = frozenset(path for _, path in PUBLIC_ROUTES)
 PERMISSION_MARK = "__purser_permission__"
 
 _bearer = HTTPBearer(
     auto_error=False, description="A Keycloak access token for the purser-admin-api audience."
 )
+
+
+class RolledBackError(Exception):
+    """A pending row was rolled back by the sweeper before the request activated it."""
 
 
 def _not_found() -> HTTPException:
@@ -155,7 +160,11 @@ def require(permission: Permission) -> Callable[..., OrgContext]:
         request: Request, ctx: Annotated[OrgContext, Depends(get_org_context)]
     ) -> OrgContext:
         raw = request.path_params.get("workspace_id")
-        workspace_id = uuid.UUID(raw) if raw else None
+        try:
+            workspace_id = uuid.UUID(raw) if raw else None
+        except ValueError:
+            # Not a workspace ID at all, so not a workspace in this org.
+            raise _not_found() from None
         if not ctx.can(permission, workspace_id):
             raise HTTPException(status.HTTP_403_FORBIDDEN, "Forbidden")
         return ctx
@@ -178,15 +187,13 @@ def require_operator() -> Callable[..., OperatorContext]:
         session: SessionDep,
         settings: Annotated[Settings, Depends(get_settings)],
     ) -> OperatorContext:
-        is_operator = session.execute(
-            select(PlatformOperator.keycloak_sub).where(
-                PlatformOperator.keycloak_sub == principal.sub
-            )
-        ).first()
-        if is_operator is None or principal.acr != settings.oidc_mfa_acr:
+        # A SECURITY DEFINER function: the API role can test this subject but
+        # can't read the operator list.
+        is_operator = bool(session.scalar(select(func.controlplane.is_operator(principal.sub))))
+        if not is_operator or principal.acr != settings.oidc_mfa_acr:
             log.info(
                 "operator access refused",
-                extra={"reason": "not_operator" if is_operator is None else "no_mfa"},
+                extra={"reason": "no_mfa" if is_operator else "not_operator"},
             )
             raise _not_found()
         set_context(session, operator_sub=principal.sub)

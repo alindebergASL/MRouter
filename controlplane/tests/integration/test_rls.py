@@ -87,6 +87,42 @@ def test_a_forged_operator_setting_grants_nothing(app_conn: Connection, two_orgs
     assert _count(app_conn, "SELECT count(*) FROM controlplane.orgs") == 0
 
 
+def test_the_app_role_cannot_list_operators(app_conn: Connection) -> None:
+    from purser_controlplane.seed import ALICE_SUB
+
+    with pytest.raises(DBAPIError, match="permission denied"):
+        app_conn.execute(text("SELECT keycloak_sub FROM controlplane.platform_operators"))
+    app_conn.rollback()
+    # It can only ask about one subject at a time.
+    ask = text("SELECT controlplane.is_operator(:s)")
+    assert app_conn.execute(ask, {"s": ALICE_SUB}).scalar_one() is True
+    assert app_conn.execute(ask, {"s": uuid.uuid4()}).scalar_one() is False
+
+
+def test_org_context_does_not_outlive_its_transaction_on_a_pooled_connection(
+    test_db: TestDatabase, two_orgs: tuple[OrgFixture, OrgFixture]
+) -> None:
+    from purser_controlplane.db import Database, set_context
+    from purser_controlplane.models import User
+
+    a, _ = two_orgs
+    database = Database(test_db.app_url, pool_size=1)
+    try:
+        with database.session() as session:
+            set_context(session, org_id=a.id)
+            assert session.query(User).count() >= 1
+            session.commit()
+            # Re-applied after a commit, in the same session.
+            assert session.query(User).count() >= 1
+        with database.session() as session:  # same pooled connection, no context
+            assert session.query(User).count() == 0
+            assert session.execute(
+                text("SELECT current_setting('purser.org_id', true)")
+            ).scalar() in {None, ""}
+    finally:
+        database.dispose()
+
+
 def test_a_real_operator_sees_every_org(app_conn: Connection, two_orgs: object) -> None:
     from purser_controlplane.seed import ALICE_SUB
 

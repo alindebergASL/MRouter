@@ -12,7 +12,10 @@ x-cp-tools: &cp-tools
   working_dir: /src/controlplane
   entrypoint: ["/src/controlplane/scripts/tools-entrypoint.sh"]
   volumes:
-    - ../..:/src
+    # The repository read-only; only controlplane/ (lock files, the OpenAPI
+    # document, formatting) is writable.
+    - ../..:/src:ro
+    - ../../controlplane:/src/controlplane
     - cp-venv:/venv
     - cp-cache:/cache
   environment:
@@ -50,13 +53,12 @@ x-controlplane: &controlplane
     - /tmp
   cap_drop: ["ALL"]
   security_opt: ["no-new-privileges:true"]
-  environment:
+  environment: &controlplane-env
     # Development-only credentials. Not secrets; never reuse them anywhere else.
     # Production injects these from AWS Secrets Manager (ADR 0003).
+    # Each service adds the one database URL its role needs (below): the API
+    # never holds the owner's or the sweeper's credentials.
     PURSER_ENV: dev
-    PURSER_DB_URL: postgresql+psycopg://purser_cp_app:cp-app-dev-only-not-a-secret@postgres:5432/purser_dev
-    PURSER_DB_SWEEPER_URL: postgresql+psycopg://purser_cp_sweeper:cp-sweeper-dev-only-not-a-secret@postgres:5432/purser_dev
-    PURSER_DB_OWNER_URL: postgresql+psycopg://purser_cp_owner:cp-owner-dev-only-not-a-secret@postgres:5432/purser_dev
     PURSER_OIDC_ISSUER: http://localhost:58080/realms/purser-dev
     # Backchannel: the issuer's public URL isn't reachable from this container.
     PURSER_OIDC_DISCOVERY_URL: http://keycloak:58080/realms/purser-dev/.well-known/openid-configuration
@@ -189,6 +191,10 @@ services:
   controlplane-migrate:
     # One-shot: migrate the schema as the owner role, then apply the dev seed.
     <<: *controlplane
+    environment:
+      <<: *controlplane-env
+      PURSER_DB_URL: postgresql+psycopg://purser_cp_owner:cp-owner-dev-only-not-a-secret@postgres:5432/purser_dev
+      PURSER_DB_OWNER_URL: postgresql+psycopg://purser_cp_owner:cp-owner-dev-only-not-a-secret@postgres:5432/purser_dev
     command: ["-c", "from purser_controlplane.__main__ import main; main(['migrate']); main(['dev-seed'])"]
     depends_on:
       controlplane-db-init:
@@ -196,8 +202,11 @@ services:
     restart: "no"
 
   controlplane:
-    # The admin API on 127.0.0.1:58180.
+    # The admin API on 127.0.0.1:58180, as the app role (no BYPASSRLS).
     <<: *controlplane
+    environment:
+      <<: *controlplane-env
+      PURSER_DB_URL: postgresql+psycopg://purser_cp_app:cp-app-dev-only-not-a-secret@postgres:5432/purser_dev
     ports:
       - "127.0.0.1:58180:8080"
     depends_on:
@@ -217,6 +226,10 @@ services:
   controlplane-sweeper:
     # Finishes or rolls back rows left pending by a failed Keycloak call.
     <<: *controlplane
+    environment:
+      <<: *controlplane-env
+      PURSER_DB_URL: postgresql+psycopg://purser_cp_sweeper:cp-sweeper-dev-only-not-a-secret@postgres:5432/purser_dev
+      PURSER_DB_SWEEPER_URL: postgresql+psycopg://purser_cp_sweeper:cp-sweeper-dev-only-not-a-secret@postgres:5432/purser_dev
     command: ["-m", "purser_controlplane", "sweep"]
     depends_on:
       controlplane-migrate:
