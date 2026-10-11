@@ -49,9 +49,7 @@ def created(keycloak: KeycloakAdmin) -> Iterator[list[tuple[str, uuid.UUID]]]:
 
 
 def _app(local_issuer: LocalIssuer, db: TestDatabase, keycloak: KeycloakAdmin) -> TestClient:
-    return TestClient(
-        create_app(settings_for(local_issuer.issuer, db_url=db.app_url), keycloak=keycloak)
-    )
+    return TestClient(create_app(settings_for(local_issuer.issuer, db=db), keycloak=keycloak))
 
 
 def _operator(local_issuer: LocalIssuer) -> dict[str, str]:

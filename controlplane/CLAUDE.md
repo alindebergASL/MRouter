@@ -1,6 +1,6 @@
 # controlplane
 
-Owner: Lane D. Guarantees: A1, A4 (API side), A5 (row-level security, in flight in the spec).
+Owner: Lane D. Guarantees: A1, A4 (API side), A5 (org isolation, with forced row-level security).
 FastAPI on Keycloak (ADR 0003). Python 3.13, the runtime image's version.
 Read the root `CLAUDE.md` first. Guarantee IDs refer to `docs/architecture.md`.
 
@@ -17,13 +17,18 @@ a cloud session, and CI use the same interpreter. Integration tests need `make d
 - Lock: `make cp-lock` after editing `pyproject.toml` (move the `exclude-newer` cooldown date
   deliberately).
 - Migrations: `make cp-migrate`. New migration: `controlplane/scripts/run.sh alembic revision
-  --autogenerate` inside cp-tools; then add row-level security for any org-scoped table by hand
-  (`tests/integration/test_rls.py` fails otherwise).
+  --autogenerate` inside cp-tools; then add forced row-level security and an `org_isolation`
+  policy for any table holding org data by hand, or put a table without org data on the reviewed
+  allowlist with its reason (`tests/integration/rls_catalog.py`; `test_rls_catalog.py` fails
+  otherwise).
 
 ## Rules for this component
 - Every route declares a permission (`require(...)` or `require_operator()`) or is in
   `PUBLIC_PATHS`; the app refuses to start otherwise. Inaccessible orgs are one identical 404.
-- The API connects as `purser_cp_app` (no BYPASSRLS). Never give it the owner URL.
+- Member routes connect as `purser_cp_app`, the request path's role: no BYPASSRLS, and only
+  org-keyed policies. Operator routes connect as `purser_cp_operator`. Never give the API the
+  owner or sweeper URL, and never add a policy for `purser_cp_app` that isn't keyed on the
+  request's org (spec 4: cross-org work runs on its own roles).
 - Store nothing from a token but identifiers (`sub`, organization IDs). Log reason codes and
   IDs, never tokens, bodies, emails, or Keycloak responses.
 - Keycloak writes: pending row first, `purser_id` as the idempotency key, then active; the

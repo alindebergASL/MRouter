@@ -24,9 +24,11 @@ class Settings(BaseSettings):
     env: Literal["dev", "test", "prod"] = "prod"
 
     # Database URLs, one per role (row-level security, A5). The API uses
-    # db_url only; the sweeper db_sweeper_url; migrations and the bootstrap
-    # CLI db_owner_url.
+    # db_url (the request path, one org per transaction) and db_operator_url
+    # (platform-operator routes, the only cross-org role it holds); the
+    # sweeper db_sweeper_url; migrations and the bootstrap CLI db_owner_url.
     db_url: SecretStr
+    db_operator_url: SecretStr | None = None
     db_sweeper_url: SecretStr | None = None
     db_owner_url: SecretStr | None = None
     db_schema: str = "controlplane"

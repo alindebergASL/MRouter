@@ -2,7 +2,10 @@
 
 Every route depends on require(<permission>), which resolves the caller in the
 path's org (404 if they can't access it) and checks the permission (403).
-The session is scoped to that org by row-level security.
+
+Every query names the path's org (spec 4). Row-level security scopes the
+session to the same org as well, as defense in depth: either one alone keeps
+another org's rows out.
 """
 
 import logging
@@ -10,7 +13,7 @@ import uuid
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
-from sqlalchemy import func, select, update
+from sqlalchemy import Select, func, select, update
 from sqlalchemy.exc import IntegrityError
 
 from purser_controlplane import audit
@@ -74,12 +77,25 @@ def _conflict() -> HTTPException:
     return HTTPException(status.HTTP_409_CONFLICT, "Conflict")
 
 
+OrgRow = Workspace | Team | User | Membership
+
+
+def _in_org[M: OrgRow](model: type[M], org_id: uuid.UUID) -> Select[M]:
+    """SELECT rows of `model` in the path's org: every query starts here (spec 4)."""
+    return select(model).where(model.org_id == org_id)
+
+
+def _get[M: OrgRow](ctx: OrgContext, model: type[M], row_id: uuid.UUID) -> M | None:
+    """One row by ID, only if it belongs to the path's org."""
+    return ctx.session.scalar(_in_org(model, ctx.org_id).where(model.id == row_id))
+
+
 # -- org ---------------------------------------------------------------------
 
 
 @router.get("", operation_id="getOrg", response_model=OrgOut)
 def get_org(org_id: uuid.UUID, ctx: Annotated[OrgContext, _ctx(P.ORG_READ)]) -> OrgOut:
-    org = ctx.session.get(Org, org_id)
+    org = ctx.session.scalar(select(Org).where(Org.id == ctx.org_id))
     assert org is not None  # get_org_context found it
     return OrgOut.model_validate(org)
 
@@ -111,7 +127,7 @@ def list_workspaces(
     after: uuid.UUID | None = None,
     limit: Limit = 50,
 ) -> Page[WorkspaceOut]:
-    query = select(Workspace)
+    query = _in_org(Workspace, ctx.org_id)
     visible = visible_workspaces(ctx.grants)
     if visible is not None:
         query = query.where(Workspace.id.in_(visible))
@@ -122,7 +138,7 @@ def list_workspaces(
 def get_workspace(
     org_id: uuid.UUID, workspace_id: uuid.UUID, ctx: Annotated[OrgContext, _ctx(P.WORKSPACE_READ)]
 ) -> WorkspaceOut:
-    workspace = ctx.session.get(Workspace, workspace_id)
+    workspace = _get(ctx, Workspace, workspace_id)
     if workspace is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Not Found")
     return WorkspaceOut.model_validate(workspace)
@@ -143,7 +159,7 @@ def create_team(
     body: TeamCreate,
     ctx: Annotated[OrgContext, _ctx(P.TEAM_CREATE)],
 ) -> TeamOut:
-    if ctx.session.get(Workspace, workspace_id) is None:
+    if _get(ctx, Workspace, workspace_id) is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Not Found")
     team = Team(id=uuid.uuid4(), org_id=org_id, workspace_id=workspace_id, name=body.name)
     ctx.session.add(team)
@@ -166,9 +182,9 @@ def list_teams(
     after: uuid.UUID | None = None,
     limit: Limit = 50,
 ) -> Page[TeamOut]:
-    if ctx.session.get(Workspace, workspace_id) is None:
+    if _get(ctx, Workspace, workspace_id) is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Not Found")
-    query = select(Team).where(Team.workspace_id == workspace_id)
+    query = _in_org(Team, ctx.org_id).where(Team.workspace_id == workspace_id)
     visible = visible_teams(ctx.grants, workspace_id)
     if visible is not None:
         query = query.where(Team.id.in_(visible))
@@ -225,7 +241,7 @@ def create_user(
         activated = affected(
             session,
             update(User)
-            .where(User.id == user.id, User.status == UserStatus.PENDING)
+            .where(User.id == user.id, User.org_id == ctx.org_id, User.status == UserStatus.PENDING)
             .values(keycloak_sub=keycloak_user_id, status=UserStatus.ACTIVE, updated_at=func.now()),
         )
         if activated != 1:
@@ -252,14 +268,14 @@ def list_users(
     after: uuid.UUID | None = None,
     limit: Limit = 50,
 ) -> Page[UserOut]:
-    return page(ctx.session, select(User), User.id, after, limit, UserOut)
+    return page(ctx.session, _in_org(User, ctx.org_id), User.id, after, limit, UserOut)
 
 
 @router.get("/users/{user_id}", operation_id="getUser", response_model=UserOut)
 def get_user(
     org_id: uuid.UUID, user_id: uuid.UUID, ctx: Annotated[OrgContext, _ctx(P.USER_READ)]
 ) -> UserOut:
-    user = ctx.session.get(User, user_id)
+    user = _get(ctx, User, user_id)
     if user is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Not Found")
     return UserOut.model_validate(user)
@@ -281,12 +297,12 @@ def create_membership(
     session = ctx.session
     if body.role in OWNER_GRANTED_ROLES and not has_role_at_org(ctx.grants, Role.OWNER):
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Only an owner may grant owner or admin")
-    if session.get(User, body.user_id) is None:
+    if _get(ctx, User, body.user_id) is None:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Unknown user")
-    if body.workspace_id is not None and session.get(Workspace, body.workspace_id) is None:
+    if body.workspace_id is not None and _get(ctx, Workspace, body.workspace_id) is None:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Unknown workspace")
     if body.team_id is not None:
-        team = session.get(Team, body.team_id)
+        team = _get(ctx, Team, body.team_id)
         if team is None or team.workspace_id != body.workspace_id:
             raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Unknown team")
     membership = Membership(
@@ -317,7 +333,7 @@ def list_memberships(
     after: uuid.UUID | None = None,
     limit: Limit = 50,
 ) -> Page[MembershipOut]:
-    query = select(Membership)
+    query = _in_org(Membership, ctx.org_id)
     if user_id is not None:
         query = query.where(Membership.user_id == user_id)
     if scope_type is not None:

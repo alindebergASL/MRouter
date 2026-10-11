@@ -34,9 +34,7 @@ ALICE = ("alice@acme-dev.example", "alice-dev-only-not-a-secret")
 
 @pytest.fixture(scope="module")
 def api(seeded: TestDatabase) -> TestClient:
-    return TestClient(
-        create_app(settings_for(ISSUER, db_url=seeded.app_url, oidc_leeway_seconds=0))
-    )
+    return TestClient(create_app(settings_for(ISSUER, db=seeded, oidc_leeway_seconds=0)))
 
 
 def bearer(token: str) -> dict[str, str]:

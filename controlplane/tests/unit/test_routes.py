@@ -65,6 +65,12 @@ def test_api_documents_are_not_served(local_issuer: LocalIssuer) -> None:
         assert client.get(path).status_code == 404
 
 
+def test_the_api_refuses_to_start_without_its_operator_role(local_issuer: LocalIssuer) -> None:
+    # Operator routes never fall back to the request path's role (spec 4).
+    with pytest.raises(RuntimeError, match="PURSER_DB_OPERATOR_URL"):
+        create_app(settings_for(local_issuer.issuer, db_operator_url=None))
+
+
 def _fill(path: str) -> str:
     return re.sub(r"\{[^}]+\}", lambda _: str(uuid.uuid4()), path)
 

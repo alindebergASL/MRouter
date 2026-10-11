@@ -27,11 +27,12 @@ def healthz() -> Status:
 )
 def readyz(request: Request, response: Response) -> Status:
     """The database answers and the auth service's keys are loaded."""
-    database: Database = request.app.state.db
+    databases: tuple[Database, ...] = (request.app.state.db, request.app.state.operator_db)
     verifier: OIDCVerifier = request.app.state.verifier
     try:
-        with database.engine.connect() as connection:
-            connection.execute(text("SELECT 1"))
+        for database in databases:
+            with database.engine.connect() as connection:
+                connection.execute(text("SELECT 1"))
         if not verifier.ready:
             verifier.load()
     except (AuthUnavailableError, Exception):

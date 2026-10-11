@@ -63,6 +63,7 @@ docker run -d --name "$name" --read-only --tmpfs /tmp --cap-drop ALL \
   --security-opt no-new-privileges --network "$network" -p "127.0.0.1:$port:8080" \
   -e PURSER_ENV=dev \
   -e PURSER_DB_URL=postgresql+psycopg://purser_cp_app:cp-app-dev-only-not-a-secret@postgres:5432/purser_dev \
+  -e PURSER_DB_OPERATOR_URL=postgresql+psycopg://purser_cp_operator:cp-operator-dev-only-not-a-secret@postgres:5432/purser_dev \
   -e PURSER_OIDC_ISSUER=http://localhost:58080/realms/purser-dev \
   -e PURSER_OIDC_DISCOVERY_URL=http://keycloak:58080/realms/purser-dev/.well-known/openid-configuration \
   "$image" >/dev/null

@@ -101,9 +101,13 @@ def create_app(
     keycloak: KeycloakAdmin | None = None,
 ) -> FastAPI:
     settings = settings or get_settings()
+    if settings.db_operator_url is None:
+        # Operator routes never fall back to the request path's role.
+        raise RuntimeError("PURSER_DB_OPERATOR_URL is not set")
     app = build_app()
     app.state.settings = settings
     app.state.db = Database(settings.db_url.get_secret_value())
+    app.state.operator_db = Database(settings.db_operator_url.get_secret_value(), pool_size=2)
     app.state.verifier = verifier or OIDCVerifier(settings)
     app.state.keycloak = keycloak if keycloak is not None else KeycloakAdmin.from_settings(settings)
 
@@ -117,6 +121,7 @@ def create_app(
             )
         yield
         app.state.db.dispose()
+        app.state.operator_db.dispose()
         if app.state.keycloak is not None:
             app.state.keycloak.close()
 

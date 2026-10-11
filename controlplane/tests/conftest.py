@@ -133,12 +133,15 @@ def _json_response(body: dict[str, Any]) -> Any:
     return Response(json.dumps(body), content_type="application/json")
 
 
-def settings_for(
-    issuer: str, db_url: str = "postgresql+psycopg://nobody@127.0.0.1:1/none", **overrides: Any
-) -> Settings:
+NO_DATABASE = "postgresql+psycopg://nobody@127.0.0.1:1/none"
+
+
+def settings_for(issuer: str, db: "TestDatabase | None" = None, **overrides: Any) -> Settings:
+    """Settings for an app on `db`'s app and operator roles (or on no database)."""
     values: dict[str, Any] = {
         "env": "test",
-        "db_url": db_url,
+        "db_url": db.app_url if db else NO_DATABASE,
+        "db_operator_url": db.operator_url if db else NO_DATABASE,
         "oidc_issuer": issuer,
         "oidc_jwks_min_refresh_seconds": 30,
         "keycloak_url": None,
@@ -160,6 +163,8 @@ class TestDatabase:
     owner_url: str
     app_url: str
     sweeper_url: str
+    operator_url: str
+    admin_url: str
 
 
 def _with_database(url: str, name: str) -> str:
@@ -180,7 +185,8 @@ def create_test_database(migrate: bool = True) -> TestDatabase:
         connection.exec_driver_sql(DB_INIT_SQL.read_text())
         connection.execute(
             text(
-                f'GRANT CONNECT ON DATABASE "{name}" TO purser_cp_owner, purser_cp_app, purser_cp_sweeper'
+                f'GRANT CONNECT ON DATABASE "{name}"'
+                " TO purser_cp_owner, purser_cp_app, purser_cp_sweeper, purser_cp_operator"
             )
         )
     init.dispose()
@@ -189,6 +195,8 @@ def create_test_database(migrate: bool = True) -> TestDatabase:
         owner_url=_with_database(os.environ["PURSER_DB_OWNER_URL"], name),
         app_url=_with_database(os.environ["PURSER_DB_URL"], name),
         sweeper_url=_with_database(os.environ["PURSER_DB_SWEEPER_URL"], name),
+        operator_url=_with_database(os.environ["PURSER_DB_OPERATOR_URL"], name),
+        admin_url=_with_database(admin_url, name),
     )
     if migrate:
         migrate_to(db, "head")

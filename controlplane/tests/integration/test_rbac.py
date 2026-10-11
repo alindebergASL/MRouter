@@ -23,7 +23,7 @@ NOT_FOUND = {"detail": "Not Found"}
 
 @pytest.fixture(scope="module")
 def api(local_issuer: LocalIssuer, seeded: TestDatabase) -> TestClient:
-    return TestClient(create_app(settings_for(local_issuer.issuer, db_url=seeded.app_url)))
+    return TestClient(create_app(settings_for(local_issuer.issuer, db=seeded)))
 
 
 @pytest.fixture(scope="module")
